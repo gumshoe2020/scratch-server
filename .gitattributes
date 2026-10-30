@@ -1,0 +1,4 @@
+# Preserve exact captured HTTP wire bytes, including CRLF and final blank line.
+tests/safari-*.http binary
+tests/firefox-*.http binary
+tests/brave-*.http binary

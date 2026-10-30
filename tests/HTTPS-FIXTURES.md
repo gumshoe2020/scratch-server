@@ -1,0 +1,1 @@
+Safari HTTPS fixtures: header NAMES and order captured on 2026-10-27 (Safari 27.0.1), per HTTPS-HEADERS.md. All values are synthetic, not captured. Host and Referer target 8093. Root gets 200; favicon path gets 404. Files contain exact CRLF framing; metadata stays here, outside request bytes.

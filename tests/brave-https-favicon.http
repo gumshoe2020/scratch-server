@@ -1,0 +1,16 @@
+GET /favicon.ico HTTP/1.1
+Host: synthetic
+Connection: synthetic
+sec-ch-ua-platform: synthetic
+User-Agent: synthetic
+sec-ch-ua: synthetic
+sec-ch-ua-mobile: synthetic
+Accept: synthetic
+Sec-GPC: synthetic
+Sec-Fetch-Site: synthetic
+Sec-Fetch-Mode: synthetic
+Sec-Fetch-Dest: synthetic
+Referer: synthetic
+Accept-Encoding: synthetic
+Accept-Language: synthetic
+

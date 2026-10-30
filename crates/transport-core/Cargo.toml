@@ -1,0 +1,9 @@
+[package]
+license = "MIT"
+name = "transport-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+vstd = "=0.0.0-2026-10-25-0158"

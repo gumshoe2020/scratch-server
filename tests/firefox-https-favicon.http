@@ -1,0 +1,13 @@
+GET /favicon.ico HTTP/1.1
+Host: localhost:8095
+User-Agent: Synthetic-Firefox-Fixture
+Accept: text/html
+Accept-Language: en-US
+Accept-Encoding: gzip, deflate, br
+Connection: keep-alive
+Referer: https://localhost:8095/
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: none
+Priority: u=0, i
+

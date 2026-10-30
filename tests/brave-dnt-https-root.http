@@ -1,0 +1,20 @@
+GET / HTTP/1.1
+Host: synthetic
+Connection: synthetic
+Pragma: no-cache
+Cache-Control: no-cache
+sec-ch-ua: synthetic
+sec-ch-ua-mobile: synthetic
+sec-ch-ua-platform: synthetic
+Upgrade-Insecure-Requests: synthetic
+User-Agent: synthetic
+Accept: synthetic
+Sec-GPC: 1
+Sec-Fetch-Site: synthetic
+Sec-Fetch-Mode: synthetic
+Sec-Fetch-User: synthetic
+Sec-Fetch-Dest: synthetic
+Accept-Encoding: synthetic
+Accept-Language: synthetic
+DNT: 1
+
