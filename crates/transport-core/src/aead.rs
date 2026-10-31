@@ -1,12 +1,12 @@
+#[path = "spec/aead.rs"]
+pub mod spec;
+pub use self::spec::*;
 use vstd::prelude::*;
 verus! {
 pub const KEY_LEN: usize = 32;
 pub const IV_LEN: usize = 12;
 pub const TAG_LEN: usize = 16;
-pub open spec fn nonce_spec(iv: Seq<u8>, seq: u64) -> Seq<u8> {
-    Seq::new(12, |i: int| iv[i] ^ (if i < 4 { 0u8 }
-        else { ((seq >> ((11 - i) * 8) as u64) & 255) as u8 }))
-}
+
 pub fn nonce(iv: &[u8], seq: u64) -> (out: Option<[u8; 12]>)
     ensures match out {
         Some(n) => iv.len() == IV_LEN && n@ == nonce_spec(iv@, seq),

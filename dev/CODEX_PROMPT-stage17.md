@@ -3,7 +3,7 @@ You are building stage 17 of scratch-server, `rustls-surface`, in this directory
 
 `RUSTLS-SURFACE.md` is the authoritative spec. Read it fully first, then TLS-PROVIDER.md,
 PROVEN-IO.md, TRUSTED-BASE.md, ATTACK-SURFACE.md, and the tail of PROGRESS.md and NOTES.md. Reuse
-the existing tooling where it fits: ./verify.sh, ./nix-build.sh, .tools/.
+the existing tooling where it fits: ./verification/verify.sh, ./nix-build.sh, .tools/.
 
 Non-negotiables:
 1. Stay on branch `rustls-surface`. Do not check out or modify other branches. Do not edit
@@ -15,7 +15,7 @@ Non-negotiables:
    builds for measurement are allowed if needed; remove any images you create.
 4. Do not run or modify the formal-coverage repository. Write nowhere outside this directory,
    except $TMPDIR, ~/.cargo, ~/.rustup (a nightly toolchain and cargo-fuzz are allowed) and Docker.
-   Do not touch the TLS key directory.
+   Do not touch <workspace>-tls.
 5. Never commit, print or log private keys, traffic secrets or plaintext record contents.
 6. No runtime behaviour change. If fuzzing finds a crash or a real bug in our code or in rustls,
    stop that target, commit the minimised evidence and explain it in NOTES.md; don't fix it. Never
@@ -34,4 +34,4 @@ tick each one only after its command has passed. Append timestamped NOTES.md ent
 short summary that includes: the M1 table (crate total / compiled / in-binary lines and functions
 per crate, and in-binary lines per attacker-facing module), unused compiled features, fuzz
 executions and corpus size per target, rustls lines reached by fuzzing out of in-binary lines, any
-findings, and confirmation that verify.sh and cargo test results are unchanged.
+findings, and confirmation that verification/verify.sh and cargo test results are unchanged.

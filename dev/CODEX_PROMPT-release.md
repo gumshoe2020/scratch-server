@@ -1,6 +1,6 @@
 Implement PLAN-RELEASE.md in this repository. That plan is authoritative.
 - Read the plan, README.md, VERIFIED-BOUNDARY.md, SPEC-LEMMAS.md, MUTANTS.md, flake.nix,
-  nix-build.sh and verify.sh before starting. Re-probe the grounded facts you rely on.
+  nix-build.sh and verification/verify.sh before starting. Re-probe the grounded facts you rely on.
 - Code work happens on `spec-lemmas` (checked out here). For the `main` docs work, use a separate
   worktree: `git worktree add "$TMPDIR/scratch-server-main" main`; remove it when done.
 - Hard fence: never weaken a proof, spec, test or mutant; no assume/admit/external_body. Don't

@@ -1,0 +1,64 @@
+# Paths are repository-relative. Rust module paths do not encode maturity.
+[[spec]]
+id = "http-subset.request"
+status = "established"
+prose = "specs/established/HEADER-POLICY.md"
+files = ["crates/http-subset/src/spec.rs", "crates/http-subset/src/intent.rs"]
+checks = ["intent lemmas", "15 spec mutants", "differential vs httparse and grammar checker"]
+reason = "Hardened over stages 3–13; intent lemmas and spec mutants target the parser/header policy."
+
+[[spec]]
+id = "transport-core.transport"
+status = "development"
+prose = "specs/development/PROVEN-TRANSPORT.md"
+files = ["crates/transport-core/src/spec.rs"]
+checks = ["Verus refinement and trace proofs", "transport tests"]
+reason = "Proven transport transitions and response formatting; no dedicated intent layer or spec mutants."
+
+[[spec]]
+id = "transport-core.dispatch"
+status = "development"
+prose = "specs/development/PROVEN-DISPATCH.md"
+files = ["crates/transport-core/src/spec/app.rs"]
+checks = ["Verus refinement and log-window proofs", "dispatch and logging oracles"]
+reason = "Proven pure dispatch and logging decisions; no dedicated intent layer or spec mutants."
+
+[[spec]]
+id = "transport-core.record"
+status = "development"
+prose = "specs/development/PROVEN-RECORD.md"
+files = ["crates/transport-core/src/spec/record.rs"]
+checks = ["Verus refinement proofs", "record/provider tests"]
+reason = "Proven record and provider gates; no dedicated intent layer or spec mutants."
+
+[[spec]]
+id = "transport-core.io"
+status = "development"
+prose = "specs/development/PROVEN-IO.md"
+files = ["crates/transport-core/src/spec/io.rs"]
+checks = ["Verus refinement and deadline/admission proofs", "I/O decision oracles"]
+reason = "Proven pure I/O decisions; clocks, syscalls and atomics stay trusted; no dedicated intent layer or spec mutants."
+
+[[spec]]
+id = "transport-core.aead"
+status = "development"
+prose = "specs/development/PROVEN-TRANSPORT.md"
+files = ["crates/transport-core/src/spec/aead.rs"]
+checks = ["standalone AEAD Verus root", "record/provider tests"]
+reason = "Nonce and length helpers are proven; crypto remains opaque locally; no dedicated intent layer or spec mutants."
+
+[[spec]]
+id = "tls.boundary"
+status = "development"
+prose = "specs/development/HTTPS.md"
+files = []
+checks = ["TLS integration tests"]
+reason = "TLS boundary prose describes largely trusted protocol code with no spec-level checks."
+
+[[spec]]
+id = "tls.provider"
+status = "development"
+prose = "specs/development/TLS-PROVIDER.md"
+files = []
+checks = ["provider and TLS integration tests"]
+reason = "Provider prose describes upstream primitive assurance and trusted glue with no local spec-level checks."

@@ -14,7 +14,7 @@ measurements from 2026-10-27; they describe the pre-release findings.
   branch, each built on the previous one. `spec-lemmas` (stage 13, `2fa5eb7`) is the tip and
   contains every stage branch. `main` is not an ancestor of the stage branches; it has 19 docs
   commits of its own.
-- On `spec-lemmas`: verify.sh gives 211/237/9 verified with 0 errors (macOS and Linux);
+- On `spec-lemmas`: verification/verify.sh gives 211/237/9 verified with 0 errors (macOS and Linux);
   `cargo test --locked` passes 31/31; 15/15 spec mutants are killed.
 - **Defect:** `nix build .#image-static` (what `./nix-build.sh image-static` runs) builds a
   deployable image from a tree with a broken proof. Only `nix flake check` runs the proofs and
@@ -31,7 +31,7 @@ measurements from 2026-10-27; they describe the pre-release findings.
 
 ## Non-negotiables
 - Do not weaken a proof, spec, test or mutant, and add no `assume`/`admit`/`external_body`.
-  verify.sh must still report 0 errors with verified counts at least 211/237/9. All 15 mutants must
+  verification/verify.sh must still report 0 errors with verified counts at least 211/237/9. All 15 mutants must
   still be killed.
 - Code changes go on `spec-lemmas`; docs changes on `main` only where named below. Leave the other
   stage branches alone: they are historical snapshots, cleaned later by a history rewrite. Do not
@@ -78,7 +78,7 @@ measurements from 2026-10-27; they describe the pre-release findings.
 - README.md on `spec-lemmas` for a public reader:
   - what this is, the threat model, what is proven / tested / trusted;
   - how to build and run (relative paths, generic ports, no local paths), and how to verify
-    (verify.sh, tests, mutants, nix-build);
+    (verification/verify.sh, tests, mutants, nix-build);
   - limits: TLS status as it actually stands; x86_64 never built; browser and second-device tests
     come only from the author's own sessions; the Nix build is not bit-reproducible (build-dir
     paths in panic strings).
@@ -104,7 +104,7 @@ measurements from 2026-10-27; they describe the pre-release findings.
   "Stage 11", "uid 65532", "mode 700" and the like) across all Markdown on both branches. Prose only:
   never change code, fixtures or code blocks.
 - Acceptance: check-public.sh exits 0 on both branches; `rg -n "[a-z][0-9]{2,}|[0-9]–[0-9]+[a-z]"`
-  over *.md shows no prose run-togethers (code spans and identifiers are fine); tests, verify.sh
+  over *.md shows no prose run-togethers (code spans and identifiers are fine); tests, verification/verify.sh
   and mutants still pass.
 
 ### M4: license (both branches)
@@ -114,7 +114,7 @@ measurements from 2026-10-27; they describe the pre-release findings.
 - Acceptance: `nix flake check` passes on spec-lemmas; LICENSE is present on both branches.
 
 ## Final check (spec-lemmas)
-verify.sh (0 errors, ≥ 211/237/9), `cargo test --locked`, the stage-13 mutant run (15/15 killed),
+verification/verify.sh (0 errors, ≥ 211/237/9), `cargo test --locked`, the stage-13 mutant run (15/15 killed),
 `./nix-build.sh image-static`, and check-public.sh all pass. Record the results in PROGRESS.md.
 
 ## Out of scope

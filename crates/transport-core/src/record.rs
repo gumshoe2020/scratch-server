@@ -1,3 +1,6 @@
+#[path = "spec/record.rs"]
+pub mod spec;
+pub use self::spec::*;
 use vstd::prelude::*;
 use crate::aead::{sealed_len, TAG_LEN};
 use crate::io::{X25519_LEN, P256_POINT_LEN};
@@ -8,9 +11,6 @@ pub struct Unpadded { pub typ: u8, pub len: usize }
 #[derive(Debug, PartialEq, Eq)]
 pub enum UnpadError { Oversized, NoContentType, ChangeCipherSpec }
 
-pub open spec fn all_zero(s: Seq<u8>) -> bool {
-    forall|i: int| 0 <= i < s.len() ==> #[trigger] s[i] == 0
-}
 pub fn unpad(plain: &[u8]) -> (out: Result<Unpadded, UnpadError>)
     ensures
         (out == Err(UnpadError::NoContentType)) <==> (plain.len() <= 16_385 && all_zero(plain@)),

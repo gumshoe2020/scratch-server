@@ -3,8 +3,8 @@ You are building stage 15 of scratch-server, `proven-record`, in this directory:
 
 `PROVEN-RECORD.md` is the authoritative spec. Read it fully first, then PROVEN-DISPATCH.md and
 PROVEN-TRANSPORT.md (the pattern you are repeating), TLS-PROVIDER.md, PROOFS.md, MUTANTS.md,
-PROGRESS.md and NOTES.md. Reuse the existing tooling: ./verify.sh, ./nix-build.sh,
-scripts/acceptance.py, scripts/spec-mutants.py, .tools/.
+PROGRESS.md and NOTES.md. Reuse the existing tooling: ./verification/verify.sh, ./nix-build.sh,
+scripts/acceptance.py, verification/scripts/spec-mutants.py, .tools/.
 
 Non-negotiables:
 1. Stay on branch `proven-record`. Do not check out or modify other branches. Do not edit
@@ -22,7 +22,7 @@ Non-negotiables:
 6. Don't change runtime behaviour beyond the one saturation case the spec permits. If an
    equivalence test exposes a real bug in the old code or in rustls, stop, commit the evidence and
    explain it in NOTES.md; don't fix it. Never weaken an existing proof, lemma or test to make
-   results look better. Proof claims need a passing ./verify.sh. Never add assume, admit,
+   results look better. Proof claims need a passing ./verification/verify.sh. Never add assume, admit,
    external_body, external or unsafe.
 
 Resolve small ambiguities by choosing reasonably and logging the choice in NOTES.md; don't stop.

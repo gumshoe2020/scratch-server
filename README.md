@@ -1,13 +1,15 @@
 # scratch-server
 
 A small HTTPS server exploring how much of a network boundary can be proved.
-This is stage 16 (`proven-io`): a strict GET/HEAD HTTP subset, configurable
+This is stage 18 (`spec-layout`). The server itself is stage 16 (`proven-io`): a strict GET/HEAD HTTP subset, configurable
 header policy, and a Verus core covering the parser, transport state, response
 formatting, dispatch and diagnostics, TLS record helpers, read deadlines and
 connection admission, plus intent lemmas and deliberate spec mutants. Stage 17 (`rustls-surface`)
 adds no server code: it measures the rustls code we actually ship and fuzzes that configuration
-(see [RUSTLS-SURFACE.md](RUSTLS-SURFACE.md)). The [stage index](EVOLUTION.md)
-shows the earlier designs. [ATTACK-SURFACE.md](ATTACK-SURFACE.md) names the remaining trusted pieces and [TRUSTED-BASE.md](TRUSTED-BASE.md) lists every unproven production function. The historical build record lives in [dev/](dev/README.md).
+(see [RUSTLS-SURFACE.md](verification/reports/RUSTLS-SURFACE.md)). Stage 18 changes only the layout:
+specs live in [specs/](specs/README.md) (split into established and development), proof machinery and
+reports in [verification/](verification/README.md), and earlier stage notes in `docs/stages/`. The [stage index](EVOLUTION.md)
+shows the earlier designs. [ATTACK-SURFACE.md](ATTACK-SURFACE.md) names the remaining trusted pieces and [TRUSTED-BASE.md](verification/TRUSTED-BASE.md) lists every unproven production function. The historical build record lives in [dev/](dev/README.md).
 
 ## Threat model and assurance
 
@@ -17,19 +19,19 @@ requests at 4096 bytes, headers at 24, names at 64 bytes, values and paths at 25
 bytes. It rejects bodies, query strings, percent escapes, pipelining, duplicate
 Host/Connection and hard-reject headers. Unknown well-formed headers are dropped
 by default; guarded headers reject unless explicitly configured to drop.
-[HEADER-POLICY.md](HEADER-POLICY.md) defines the policy and configuration grammar.
+[HEADER-POLICY.md](specs/established/HEADER-POLICY.md) defines the policy and configuration grammar.
 
 Proven against written specs: parser acceptance and bounds for all inputs,
 transport event/byte state transitions, response formatting, selected AEAD
 helpers, routing, rejection diagnostics, log sanitizing and the unknown-header
-log limiter ([PROVEN-DISPATCH.md](PROVEN-DISPATCH.md)), TLS record unpadding,
+log limiter ([PROVEN-DISPATCH.md](specs/development/PROVEN-DISPATCH.md)), TLS record unpadding,
 AAD, inner-plaintext and key-share shape checks
-([PROVEN-RECORD.md](PROVEN-RECORD.md)), and read deadlines, read
+([PROVEN-RECORD.md](specs/development/PROVEN-RECORD.md)), and read deadlines, read
 classification, connection admission and port parsing
-([PROVEN-IO.md](PROVEN-IO.md)). Intent lemmas check non-vacuity, attacks and universal properties of the
-spec. See [PROOFS.md](PROOFS.md), [INTENT.md](INTENT.md) and
-[VERIFIED-BOUNDARY.md](VERIFIED-BOUNDARY.md). Proofs cannot establish that the spec
-captures every security requirement. Fifteen [spec mutants](MUTANTS.md) exercise
+([PROVEN-IO.md](specs/development/PROVEN-IO.md)). Intent lemmas check non-vacuity, attacks and universal properties of the
+spec. See [PROOFS.md](verification/reports/PROOFS.md), [INTENT.md](verification/reports/INTENT.md) and
+[VERIFIED-BOUNDARY.md](verification/reports/VERIFIED-BOUNDARY.md). Proofs cannot establish that the spec
+captures every security requirement. Fifteen [spec mutants](verification/reports/MUTANTS.md) exercise
 specific mistakes, with refinement proofs checked before intent/test failures.
 
 Tested: 100,000 differential inputs under three policies, 10,000 generated
@@ -90,15 +92,18 @@ Logs retain sanitized names/status, never values; unknown-name logging is bounde
 ## Verify
 
 ```sh
-./verify.sh > proofs.log 2>&1
+./verification/verify.sh > logs/proofs.log 2>&1
 CARGO_HOME="$PWD/.tools/cargo" RUSTUP_HOME="$PWD/.tools/rustup" \
-  cargo test --locked --workspace > tests.log 2>&1
-python3 scripts/spec-mutants.py > mutants.log 2>&1
-./nix-build.sh check > checks.log 2>&1
+  cargo test --locked --workspace > logs/tests.log 2>&1
+python3 verification/scripts/spec-mutants.py > logs/mutants.log 2>&1
+./nix-build.sh check > logs/checks.log 2>&1
 scripts/check-public.sh /path/to/private-denylist.txt
 ```
 
-Proof groups have 211/237/9 verified obligations and zero errors; groups overlap.
+See the [verification guide](verification/README.md) and
+[spec catalog guide](specs/README.md) for the layout and maturity policy.
+
+Proof groups have 211/317/9 verified obligations and zero errors; groups overlap.
 Both image targets depend on the same proof and cargo-deny derivations as
 `nix flake check`, alongside the binary's tests. Logs stay under `logs/`.
 `./nix-build.sh proof-log`, `test-log` and `deny-log` retrieve retained evidence.
@@ -107,9 +112,9 @@ Both image targets depend on the same proof and cargo-deny derivations as
 
 TLS is TLS 1.3 only: ChaCha20-Poly1305/SHA256, X25519 and ECDSA P-256, via a custom
 libcrux rustls provider. Upstream primitive verification claims are distinguished
-from locally checked proofs in [TLS-PROVIDER.md](TLS-PROVIDER.md). This is not a
+from locally checked proofs in [TLS-PROVIDER.md](specs/development/TLS-PROVIDER.md). This is not a
 verified TLS protocol or a proof of the whole server. Historical AWS-LC blockers
-in [TLS-COVERAGE.md](TLS-COVERAGE.md) describe an earlier stage.
+in [TLS-COVERAGE.md](verification/reports/TLS-COVERAGE.md) describe an earlier stage.
 
 Only aarch64 Linux and native macOS have been checked. x86_64 has never been
 built. Physical browser and second-device observations come only from the
@@ -139,6 +144,6 @@ runtime dependencies: **336,654 SLoC (not proven)**, for aarch64-unknown-linux-m
 This is the stage-13 baseline measurement, not a new measurement of this release pass.
 
 The historical measurement helper requires an explicit formal-coverage checkout:
-`python3 scripts/measure-coverage.py /path/to/formal-coverage`. It retains the v1
+`python3 verification/scripts/measure-coverage.py /path/to/formal-coverage`. It retains the v1
 three-receipt union method for auditing older records; its output is not the v1.4
 baseline above. No formal-coverage checkout is modified by the helper.

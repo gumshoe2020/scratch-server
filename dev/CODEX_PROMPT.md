@@ -2,8 +2,8 @@ You are building stage 13 of scratch-server, `spec-lemmas`, in this directory:
 <workspace> (git branch `spec-lemmas`).
 
 `SPEC-LEMMAS.md` is the authoritative spec: read it fully first, then HEADER-POLICY.md, PROOFS.md,
-PROGRESS.md and NOTES.md. Reuse existing tooling (./verify.sh, ./nix-build.sh,
-scripts/acceptance.py, scripts/measure-coverage.py, .tools/).
+PROGRESS.md and NOTES.md. Reuse existing tooling (./verification/verify.sh, ./nix-build.sh,
+scripts/acceptance.py, verification/scripts/measure-coverage.py, .tools/).
 
 Non-negotiables:
 1. Stay on branch `spec-lemmas`. Do not check out or modify other branches. Do not edit
@@ -20,7 +20,7 @@ Non-negotiables:
 5. Never commit, print or log private keys or header values.
 6. Don't change runtime behaviour. If a lemma exposes a real bug in the spec or the code, stop,
    commit the evidence and explain it in NOTES.md; don't fix it. Never weaken a lemma or drop a
-   mutant to make results look better. Proof claims need a passing ./verify.sh. Never add assume,
+   mutant to make results look better. Proof claims need a passing ./verification/verify.sh. Never add assume,
    admit, external_body, external or unsafe.
 
 Resolve small ambiguities by choosing reasonably and logging the choice in NOTES.md; don't stop.

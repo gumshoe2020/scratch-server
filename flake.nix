@@ -13,7 +13,7 @@
       };
       proofSource = pkgs: pkgs.lib.fileset.toSource {
         root = ./.;
-        fileset = pkgs.lib.fileset.unions [ ./crates ./verify.sh ];
+        fileset = pkgs.lib.fileset.unions [ ./crates ./verification/verify.sh ];
       };
       build = pkgs: rustPlatform: rustPlatform.buildRustPackage {
         pname = "scratch-server";
@@ -71,7 +71,7 @@
             chmod -R u+w source
             cd source
             export VERUS=${verus}/bin/verus
-            ./verify.sh
+            ./verification/verify.sh
             touch "$out"
           '';
           dependencies = server.overrideAttrs (old: {
