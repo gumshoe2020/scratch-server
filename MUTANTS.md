@@ -53,3 +53,48 @@ workspace tests pass, including 100,000 differential inputs (three policies, zer
 mismatches),10,000 config fuzz cases and loopback TLS acceptance. The independent
 aarch64-linux Nix check also passes. Counts overlap across proof roots. No
 deployment or protected-container reuse; production executable source unchanged.
+
+## Stage 14 revalidation (2026-10-30)
+
+The unchanged `python3 scripts/spec-mutants.py` campaign passed against the
+proven-dispatch implementation: **15/15 killed**, **0 survivors**, **0 invalid**.
+All fifteen retained the complete pre-intent refinement proofs, including the new
+application core. Thirteen were killed by focused intent lemmas; all fifteen
+also failed actual workspace tests. No fault class was removed or relaxed.
+
+Baseline: `./verify.sh` **211/0 parser, 285/0 transport, 9/0 AEAD** and
+**39 passing workspace tests**. Mutations ran only in temporary copies under
+target; the runner checked that working-tree Rust/config/fixture hashes stayed
+unchanged. Receipts are archived at `logs/stage14-mutants/results.json` with
+adjacent baseline/per-mutant logs; top-level output is `logs/stage14-mutants.log`.
+The runner's original internal receipt directory is `logs/stage13-mutants`.
+
+
+## Stage 15 revalidation (2026-10-30)
+
+The unchanged `python3 scripts/spec-mutants.py` passed against proven-record:
+**15/15 killed, 0 survivors, 0 invalid**. Every mutant preserved the full
+pre-intent refinement phase, including record.rs. Thirteen failed focused
+intent lemmas; all fifteen failed actual workspace tests. Temporary copies
+remained under target, and working-tree Rust/config/fixture hash checks passed.
+Baseline full proofs: **211/0 parser, 298/0 transport, 9/0 standalone AEAD**;
+workspace **43/0**, including all 39 inherited tests and four new record
+comparisons. No fault class or existing test/proof was weakened.
+Receipts: `logs/stage15-mutants/results.json` and adjacent per-mutant logs;
+top-level `logs/stage15-mutants.log`. Original tooling receipts remain under
+`logs/stage13-mutants` and were archived after successful completion.
+
+## Stage 16 revalidation (2026-10-30)
+
+The unchanged spec-mutant campaign passes **15/15 killed, zero survivors and
+zero invalid runs**. All fifteen pre-intent refinement checks pass, including
+the new I/O proofs. 13 mutants fail focused intent lemmas; all fifteen fail
+actual workspace tests. Source/fixture/config working-tree hash checks pass.
+Mutations run only in temporary copies under target. The original runner is
+executed with only its receipt-directory literal redirected in memory from
+logs/stage13-mutants to logs/stage16-mutants; no fault/proof/test logic changes.
+
+Baseline full Verus: **211 parser / 317 transport / 9 standalone AEAD**, zero
+errors (overlapping roots); workspace **52 passed / zero failed**. Receipts:
+logs/stage16-mutants.log, logs/stage16-mutants/results.json and adjacent
+baseline/per-mutant logs. No historical result is substituted for this run.

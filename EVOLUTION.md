@@ -1,7 +1,7 @@
 # Evolution
 
-The project was built in 13 stages, each on top of the one before. This repository holds the
-latest stage (13, `spec-lemmas`); the table below records what each earlier stage changed and
+The project was built in 16 stages, each on top of the one before. This repository holds the
+latest stage (16, `proven-io`); the table below records what each earlier stage changed and
 what was measured at the time. Each stage's design notes are kept in this tree and linked in the
 last column.
 
@@ -24,6 +24,9 @@ see the [README](README.md) for current TLS and verification limits.
 | 11 | 8091 | `pragma-header` | Whitelist 18 → 19: `Pragma`, observed in the server log when Brave ran with DevTools "Disable cache" (see `PRAGMA-HEADER.md`) | Brave with cache disabled loads. Proofs pass; no escape hatches; `Pragmas` rejected. | v1.4 remeasure pending | [PRAGMA-HEADER.md](PRAGMA-HEADER.md) |
 | 12 | 8091 | `header-policy` | Explicit whitelist → configurable proven header policy, after Brave sent `dnt` (likely Privacy Badger): 9 hard-reject names fixed in code, 16 guarded names reject by default (config may set drop), unknown well-formed names dropped and logged; `unknown reject` = strict mode. Duplicate Host/Connection rejected. Handler sees only method and path (see `HEADER-POLICY.md`) | Brave with DNT loads. Proven: config cannot loosen hard-reject names; strict mode = stage 11 minus duplicates; no dropped header reaches the handler. Proofs 56/82/9, no escape hatches; bad config refuses to start. | v1.4 remeasure pending | [HEADER-POLICY.md](HEADER-POLICY.md) |
 | 13 | — | `spec-lemmas` | Checks the spec against intent (no runtime change). 42 proven intent lemmas: captured Safari/Firefox/Brave requests accepted (non-vacuity), ~25 classic attacks rejected, and "never" statements over every input and every valid config; INTENT.md lists each in plain English. 15 deliberate spec+code mutants, each consistent with the refinement proofs (see `SPEC-LEMMAS.md`) | 15/15 mutants caught (13 by intent proofs, 2 by fixture/config tests), 0 survivors; Dudley re-ran Transfer-Encoding and Cookie mutants independently. `/../` paths get 404, no filesystem access (tested + source review). Proofs 211/237/9, no escape hatches. | v1.4 remeasure pending | [SPEC-LEMMAS.md](SPEC-LEMMAS.md), [INTENT.md](INTENT.md), [MUTANTS.md](MUTANTS.md) |
+| 14 | 8096 | `proven-dispatch` | Post-parser decisions moved out of the unverified shell into a new Verus-proven module, `transport-core/src/app.rs`: dispatch planning, routing, rejection and diagnostic lines, header-name sanitizing and the unknown-header log limiter. The shell now only does I/O and calls `app::` (see `PROVEN-DISPATCH.md`) | 16 normal and malformed requests over TLS give byte-identical responses to stage 13. Proofs 211/285/9, no escape hatches; 39 tests pass; 15/15 spec mutants caught. Hardened container: read-only root, non-root user, all capabilities dropped | 1,011 of 1,617 SLoC proven (62.5%), against 644 of 1,348 (47.8%) for stage 13 in the same run. Most of the rise comes from the longer proven code; unproven code fell 704 → 606 lines | [PROVEN-DISPATCH.md](PROVEN-DISPATCH.md) |
+| 15 | 8097 | `proven-record` | TLS record glue in `src/tls.rs` moved into a new proven module, `transport-core/src/record.rs`: record unpadding (matching rustls exactly), AAD, inner-plaintext construction with saturating length arithmetic, X25519 and P-256 key-share shape checks and signature-scheme choice (see `PROVEN-RECORD.md`) | Record helpers and shell compared against rustls oracles; all 18 live comparison cases match stage 14. Proofs 211/298/9, no escape hatches; 44 tests pass; 15/15 spec mutants caught. Follow-up fix: the inner-plaintext buffer is reserved at full size up front, so it never regrows and leaves no unzeroed plaintext copies behind | 1,107 proven lines (+96, all in `record.rs`), same method as stage 14 | [PROVEN-RECORD.md](PROVEN-RECORD.md) |
+| 16 | 8098 | `proven-io` | Startup and I/O decisions moved into a new proven module, `transport-core/src/io.rs`: read deadlines, read-result classification, connection admission and port parsing. Every remaining unproven production function is listed with its reason and test in `TRUSTED-BASE.md`. One behaviour change: a 10-second request deadline from the first request byte, because a client trickling one byte per TLS record could hold a connection for over two hours (see `PROVEN-IO.md`) | A slow-trickle request is cut off with 400 at 10 s (stage 15 returned 200 after 51 s); the other 18 live responses match stage 15 byte for byte. Proofs 211/317/9, no escape hatches; 52 tests pass; 15/15 spec mutants caught | 1,208 of 1,861 lines of running server code proven (64.9%), +101 over stage 15, same method; most of the 653 unproven lines are TLS glue around rustls calls | [PROVEN-IO.md](PROVEN-IO.md), [TRUSTED-BASE.md](TRUSTED-BASE.md) |
 
 Per-stage first-party coverage is v1.4 remeasure pending; no historical tool figures
 are comparable until remeasured with the same counting rule.
@@ -33,7 +36,9 @@ First-party security-relevant code: **644 of 1,363 SLoC proven (47.25%)**, measu
 300 tested, 419 unverified. Counting rule: package source SLoC, with the security
 boundary defined by formal-coverage's scratch-server config. Shipped third-party
 runtime dependencies: **336,654 SLoC (not proven)**, for aarch64-unknown-linux-musl.
-This is the stage-13 baseline measurement, not a new measurement of this release pass.
+This is the stage-13 baseline measurement. Stages 14–16 were measured with a narrower per-stage
+method (proven lines of running server code, shown in the table); the two methods are not
+comparable.
 
 ## Goal
 See [ATTACK-SURFACE.md](ATTACK-SURFACE.md) for what attack surface remains and the plan for each piece.

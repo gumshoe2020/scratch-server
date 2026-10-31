@@ -27,7 +27,7 @@
       packages = forAll (pkgs:
         let
           mkImage = tag: server: pkgs.dockerTools.buildLayeredImage {
-            name = "scratch-server";
+            name = "proven-io";
             # Build-time gates: checks are dependencies, never image contents.
             extraCommands = ''
               test -e ${self.checks.${pkgs.stdenv.hostPlatform.system}.proofs}

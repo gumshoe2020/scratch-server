@@ -1,4 +1,4 @@
-//! Transport and application code. HTTP byte interpretation lives in http-subset.
+//! Transport shell. Post-machine decisions live in transport_core::app.
 pub mod tls;
 pub mod transport;
 use std::{
@@ -7,17 +7,19 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Mutex,
     },
-    time::{Duration, Instant},
+    time::Instant,
 };
 use transport_core::{
-    http::{classify, drop_header, Policy},
-    response, Action, Event, Machine, Reason, Status,
+    app::{self, Route, Task},
+    http::Policy,
+    Event, Machine,
 };
 
 pub struct ServerState {
     pub handler_calls: AtomicUsize,
     pub policy: Policy,
-    unknown_log: Mutex<UnknownLog>,
+    unknown_log: Mutex<app::UnknownLog>,
+    clock_origin: Instant,
 }
 impl Default for ServerState {
     fn default() -> Self {
@@ -29,167 +31,55 @@ impl ServerState {
         Self {
             handler_calls: AtomicUsize::new(0),
             policy,
-            unknown_log: Mutex::new(UnknownLog::default()),
+            unknown_log: Mutex::new(app::UnknownLog::new()),
+            clock_origin: Instant::now(),
         }
     }
 }
-#[derive(Default)]
-struct UnknownLog {
-    names: Vec<(String, Instant)>,
-}
-impl UnknownLog {
-    fn should_log(&mut self, name: &[u8], limit: u16, now: Instant) -> bool {
-        self.names
-            .retain(|(_, time)| now.duration_since(*time) < Duration::from_secs(60));
-        if self.names.len() >= usize::from(limit).min(64)
-            || self
-                .names
-                .iter()
-                .any(|(old, _)| old.as_bytes().eq_ignore_ascii_case(name))
-        {
-            return false;
-        }
-        self.names
-            .push((String::from_utf8_lossy(name).to_ascii_lowercase(), now));
-        true
-    }
-}
-fn sanitized(name: &[u8]) -> String {
-    name.iter()
-        .copied()
-        .filter(|b| b.is_ascii_alphanumeric() || *b == b'-')
-        .take(64)
-        .map(char::from)
-        .collect()
-}
-// Name-only diagnostic walk. Its output never controls parser acceptance.
-fn header_names(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
-    let mut rest = bytes;
-    let mut first = true;
-    std::iter::from_fn(move || loop {
-        let end = rest.windows(2).position(|w| w == b"\r\n")?;
-        let line = &rest[..end];
-        rest = &rest[end + 2..];
-        if first {
-            first = false;
-            continue;
-        }
-        if line.is_empty() {
-            rest = &[];
-            return None;
-        }
-        if let Some(colon) = line.iter().position(|b| *b == b':') {
-            return Some(&line[..colon]);
-        }
-    })
-}
-fn log_unknown(bytes: &[u8], status: u16, state: &ServerState) {
+fn log_unknown(bytes: &[u8], route: Route, state: &ServerState) {
     let Ok(mut limiter) = state.unknown_log.lock() else {
         return;
     };
-    for name in header_names(bytes) {
-        if classify(name) == 44 && limiter.should_log(name, state.policy.log_limit, Instant::now()) {
-            let _ = writeln!(
-                io::stdout().lock(),
-                "status={status} note=unknown_header name={}",
-                sanitized(name)
-            );
+    let mut pos = 0;
+    while let Some((a, b, next)) = app::next_unknown(bytes, pos) {
+        let now = Instant::now()
+            .duration_since(state.clock_origin)
+            .as_millis();
+        let now_ms = u64::try_from(now).unwrap_or(u64::MAX);
+        if limiter.should_log(&bytes[a..b], state.policy.log_limit, now_ms) {
+            let line = app::unknown_line(route, &bytes[a..b]);
+            let _ = writeln!(io::stdout().lock(), "{}", String::from_utf8_lossy(&line));
         }
+        pos = next;
     }
 }
-
-fn reply(stream: &mut impl Write, status: Status, body: &[u8], head: bool) -> io::Result<()> {
-    let bytes = response(status, body, head)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "response too large"))?;
+fn reply(stream: &mut impl Write, bytes: Option<Vec<u8>>) -> io::Result<()> {
+    let bytes =
+        bytes.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "response too large"))?;
     stream.write_all(&bytes)?;
     stream.flush()
 }
-
-fn dispatch(
-    stream: &mut impl Write,
-    path: &[u8],
-    head: bool,
-    state: &ServerState,
-) -> io::Result<()> {
-    state.handler_calls.fetch_add(1, Ordering::Relaxed);
-    match path {
-        b"/health" => reply(stream, Status::Ok, b"ok", head),
-        b"/" => {
-            let missing: Vec<&str> = [
-                "/bin/sh",
-                "/bin/bash",
-                "/usr/bin/python3",
-                "/usr/bin/curl",
-                "/bin/ls",
-            ]
-            .into_iter()
-            .filter(|p| !std::path::Path::new(p).exists())
-            .collect();
-            let body = format!(
-                "Hello from a FROM-scratch container.\nNot present in this image: {}\n",
-                missing.join(", ")
-            );
-            reply(stream, Status::Ok, body.as_bytes(), head)
-        }
-        _ => reply(stream, Status::NotFound, b"not found\n", head),
-    }
+fn root_body() -> String {
+    let missing: Vec<&str> = [
+        "/bin/sh",
+        "/bin/bash",
+        "/usr/bin/python3",
+        "/usr/bin/curl",
+        "/bin/ls",
+    ]
+    .into_iter()
+    .filter(|p| !std::path::Path::new(p).exists())
+    .collect();
+    format!(
+        "Hello from a FROM-scratch container.\nNot present in this image: {}\n",
+        missing.join(", ")
+    )
 }
 
-// Diagnostics are trusted code: they never determine grammar acceptance.
-fn rejection_line(bytes: &[u8], policy: &Policy) -> String {
-    let mut host = false;
-    let mut connection = false;
-    let mut count = 0;
-    for name in header_names(bytes) {
-        count += 1;
-        if count > 24 {
-            return "status=400 reason=too_many_headers".to_owned();
-        }
-        let class = classify(name);
-        let reason = if (19..28).contains(&class) {
-            Some("hard_reject")
-        } else if (class == 0 && host) || (class == 2 && connection) {
-            Some("duplicate")
-        } else if !drop_header(policy, class) {
-            Some(if class < 44 {
-                "guarded"
-            } else {
-                "unknown_header"
-            })
-        } else {
-            None
-        };
-        host |= class == 0;
-        connection |= class == 2;
-        if let Some(reason) = reason {
-            return format!("status=400 reason={reason} name={}", sanitized(name));
-        }
-    }
-    "status=400 reason=grammar".to_owned()
-}
-
-fn reject(
-    stream: &mut impl Write,
-    bytes: &[u8],
-    reason: Option<&str>,
-    state: &ServerState,
-) -> io::Result<()> {
-    // Ignore stdout failures so diagnostics cannot prevent the rejection response.
-    let line = reason.map_or_else(
-        || rejection_line(bytes, &state.policy),
-        |r| format!("status=400 reason={r}"),
-    );
-    let _ = writeln!(io::stdout().lock(), "{line}");
-    reply(stream, Status::BadRequest, b"bad request\n", false)
-}
-
-/// Every read is submitted to parse before framing or dispatch inspects those bytes.
-/// One request per connection. A successful parse must consume the entire read buffer.
-/// Later bytes arriving after dispatch are discarded when the connection closes.
+/// Submit every read to the proven machine before application handling.
 pub fn serve_connection(stream: &mut (impl Read + Write), state: &ServerState) -> io::Result<()> {
     serve_with_started(stream, state, || {})
 }
-
 pub(crate) fn serve_with_started(
     stream: &mut (impl Read + Write),
     state: &ServerState,
@@ -198,54 +88,81 @@ pub(crate) fn serve_with_started(
     let mut machine = Machine::with_policy(state.policy);
     let mut chunk = [0u8; 1024];
     loop {
-        let event = match stream.read(&mut chunk) {
-            Ok(0) => Event::Eof,
-            Ok(count) => {
-                started();
-                Event::Bytes(&chunk[..count])
-            }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
-                ) =>
-            {
-                Event::ReadTimeout
-            }
-            Err(e) => return Err(e),
+        let read = stream.read(&mut chunk);
+        let (step, starts) = transport_core::io::classify(read_result(&read));
+        if starts {
+            started();
+        }
+        let event = match step {
+            transport_core::io::Step::Retry => continue,
+            transport_core::io::Step::Eof => Event::Eof,
+            transport_core::io::Step::Bytes(count) => Event::Bytes(&chunk[..count]),
+            transport_core::io::Step::ReadTimeout => Event::ReadTimeout,
+            transport_core::io::Step::Fail => return Err(read.unwrap_err()),
         };
-        match machine.step(event) {
-            Action::ReadMore => continue,
-            Action::Dispatch(request) => {
-                let path = &machine.bytes()[request.path_start..request.path_end];
-                let status = if path == b"/" || path == b"/health" {
-                    200
+        let plan = app::plan(machine.step(event));
+        match &plan.task {
+            Task::ReadMore => continue,
+            Task::Dispatch(request) => {
+                let route = app::route(&machine.bytes()[request.path_start..request.path_end]);
+                log_unknown(machine.bytes(), route, state);
+                state
+                    .handler_calls
+                    .fetch_add(plan.handler_increment, Ordering::Relaxed);
+                let body = if app::needs_root(route) {
+                    root_body()
                 } else {
-                    404
+                    String::new()
                 };
-                log_unknown(machine.bytes(), status, state);
-                return dispatch(stream, path, request.head, state);
-            }
-            Action::Reject(reason) => {
-                return reject(
+                return reply(
                     stream,
-                    machine.bytes(),
-                    match reason {
-                        Reason::Grammar => None,
-                        Reason::Size => Some("size"),
-                        Reason::Slow => Some("slow"),
-                    },
-                    state,
-                )
+                    app::task_response(&plan.task, route, body.as_bytes()),
+                );
             }
-            Action::CloseSilently => {
+            Task::Reject(reason) => {
+                let line = app::rejection_line(machine.bytes(), &state.policy, reason);
+                let _ = writeln!(io::stdout().lock(), "{}", String::from_utf8_lossy(&line));
+                return reply(stream, app::task_response(&plan.task, Route::NotFound, b""));
+            }
+            Task::CloseSilently => {
                 let _ = writeln!(io::stdout().lock(), "closed reason=idle");
                 return Ok(());
             }
-            Action::Done => return Ok(()),
+            Task::Done => return Ok(()),
         }
     }
+}
+
+// Preserve the original error object for the Fail path.
+fn read_result(read: &io::Result<usize>) -> transport_core::io::ReadResult {
+    use transport_core::io::ReadResult;
+    match read {
+        Ok(n) => ReadResult::Data(*n),
+        Err(e) => match e.kind() {
+            io::ErrorKind::Interrupted => ReadResult::Interrupted,
+            io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => ReadResult::Timeout,
+            _ => ReadResult::Other,
+        },
+    }
+}
+
+// Test adapters preserve the existing test assertions; production uses byte buffers.
+#[cfg(test)]
+fn sanitized(name: &[u8]) -> String {
+    String::from_utf8(app::sanitize(name)).unwrap()
+}
+#[cfg(test)]
+fn header_names(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
+    let mut pos = 0;
+    std::iter::from_fn(move || {
+        let (a, b, next) = app::next_header_name(bytes, pos)?;
+        pos = next;
+        Some(&bytes[a..b])
+    })
+}
+#[cfg(test)]
+fn rejection_line(bytes: &[u8], policy: &Policy) -> String {
+    String::from_utf8(app::diagnostic_line(app::diagnose(bytes, policy), bytes)).unwrap()
 }
 
 #[cfg(test)]
@@ -253,21 +170,19 @@ mod policy_tests {
     use super::*;
     #[test]
     fn unknown_log_is_bounded_in_every_sliding_minute() {
-        let now = Instant::now();
+        let now = 0u64;
         for limit in [0, 1, 60, 600] {
-            let mut log = UnknownLog::default();
+            let mut log = app::UnknownLog::new();
             let mut lines = 0;
             for i in 0..1000 {
-                lines += usize::from(log.should_log(format!("X-{}", i % 100).as_bytes(), limit, now));
-                assert!(log.names.len() <= 64);
+                lines +=
+                    usize::from(log.should_log(format!("X-{}", i % 100).as_bytes(), limit, now));
+                assert!(log.entries.len() <= 64);
             }
             assert_eq!(lines, usize::from(limit).min(64));
-            assert!(!log.should_log(b"x-0", limit, now + Duration::from_secs(59)));
-            assert_eq!(
-                log.should_log(b"X-0", limit, now + Duration::from_secs(60)),
-                limit > 0
-            );
-            assert!(log.names.len() <= 64);
+            assert!(!log.should_log(b"x-0", limit, now + 59_000));
+            assert_eq!(log.should_log(b"X-0", limit, now + 60_000), limit > 0);
+            assert!(log.entries.len() <= 64);
         }
     }
     #[test]
@@ -314,3 +229,9 @@ mod policy_tests {
         assert_eq!(sanitized(&[b'A'; 65]).len(), 64);
     }
 }
+
+#[cfg(test)]
+mod dispatch_oracle;
+
+#[cfg(test)]
+mod io_tests;

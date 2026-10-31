@@ -14,10 +14,9 @@ use std::{
 };
 
 fn port() -> std::io::Result<u16> {
-    env::var("SCRATCH_PORT")
-        .unwrap_or_else(|_| "8080".into())
-        .parse()
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid SCRATCH_PORT"))
+    let value = env::var("SCRATCH_PORT").ok();
+    transport_core::io::parse_port(value.as_deref().map(str::as_bytes))
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid SCRATCH_PORT"))
 }
 
 fn main() -> ExitCode {
@@ -91,9 +90,7 @@ fn run() -> std::io::Result<()> {
         let accepted = Instant::now();
         // Bound concurrent threads; excess connections are closed without dispatch.
         if active
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
-                (n < 64).then_some(n + 1)
-            })
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, transport_core::io::admit)
             .is_err()
         {
             println!("closed reason=capacity");
@@ -108,7 +105,9 @@ fn run() -> std::io::Result<()> {
             if let Err(e) = result {
                 eprintln!("closed reason=transport kind={:?}", e.kind());
             }
-            active.fetch_sub(1, Ordering::Relaxed);
+            let _ = active.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                Some(transport_core::io::release(n))
+            });
         });
     }
     Ok(())
@@ -153,5 +152,28 @@ fn healthcheck() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod io_tests {
+    #[test]
+    fn stage16_port_unset_non_utf8_and_error() {
+        use std::os::unix::ffi::OsStringExt;
+        let previous = std::env::var_os("SCRATCH_PORT");
+        std::env::remove_var("SCRATCH_PORT");
+        assert_eq!(super::port().unwrap(), 8080);
+        std::env::set_var("SCRATCH_PORT", std::ffi::OsString::from_vec(vec![255]));
+        assert_eq!(super::port().unwrap(), 8080);
+        std::env::set_var("SCRATCH_PORT", "+65535");
+        assert_eq!(super::port().unwrap(), 65535);
+        std::env::set_var("SCRATCH_PORT", "65536");
+        let error = super::port().unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), "invalid SCRATCH_PORT");
+        match previous {
+            Some(value) => std::env::set_var("SCRATCH_PORT", value),
+            None => std::env::remove_var("SCRATCH_PORT"),
+        }
     }
 }

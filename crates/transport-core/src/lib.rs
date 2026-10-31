@@ -1,6 +1,9 @@
 use vstd::prelude::*;
 // The original parser source is shared unchanged, including its contracts.
 pub mod aead;
+pub mod record;
+pub mod app;
+pub mod io;
 #[path = "../../http-subset/src/lib.rs"]
 pub mod http;
 use http::{parse_policy, Policy, Request, MAX_REQUEST};

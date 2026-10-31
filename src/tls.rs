@@ -15,7 +15,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
-use transport_core::aead;
+use transport_core::{aead, record};
 use zeroize::Zeroizing;
 
 pub fn provider() -> CryptoProvider {
@@ -78,7 +78,7 @@ impl hash::Hash for Sha256 {
         hash::Output::new(&libcrux_sha2::sha256(data))
     }
     fn output_len(&self) -> usize {
-        32
+        transport_core::io::HASH_LEN
     }
     fn algorithm(&self) -> hash::HashAlgorithm {
         hash::HashAlgorithm::SHA256
@@ -145,7 +145,7 @@ impl HkdfExpander for Expander {
         OkmBlock::new(out.as_ref())
     }
     fn hash_len(&self) -> usize {
-        32
+        transport_core::io::HASH_LEN
     }
 }
 
@@ -171,9 +171,9 @@ impl crypto::SupportedKxGroup for X25519 {
 impl crypto::ActiveKeyExchange for Exchange {
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, Error> {
         let invalid = || Error::PeerMisbehaved(rustls::PeerMisbehaved::InvalidKeyShare);
-        let peer: &[u8; 32] = peer.try_into().map_err(|_| invalid())?;
+        let peer = record::x25519_peer(peer).ok_or_else(invalid)?;
         let mut shared = Zeroizing::new([0; 32]);
-        libcrux_curve25519::ecdh(&mut shared, peer, &self.secret).map_err(|_| invalid())?;
+        libcrux_curve25519::ecdh(&mut shared, &peer, &self.secret).map_err(|_| invalid())?;
         Ok(crypto::SharedSecret::from(shared.as_slice()))
     }
     fn pub_key(&self) -> &[u8] {
@@ -214,9 +214,11 @@ impl MessageEncrypter for RecordCipher {
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error> {
         let ciphertext_len = aead::sealed_len(msg.payload.len()).ok_or(Error::EncryptError)?;
-        let mut plain = Zeroizing::new(Vec::with_capacity(ciphertext_len - aead::TAG_LEN));
-        msg.payload.copy_to_vec(&mut plain);
-        plain.push(u8::from(msg.typ));
+        let mut payload_bytes = Zeroizing::new(Vec::with_capacity(msg.payload.len()));
+        msg.payload.copy_to_vec(&mut payload_bytes);
+        let plain = Zeroizing::new(
+            record::inner_plaintext(&payload_bytes, u8::from(msg.typ)).ok_or(Error::EncryptError)?,
+        );
         let mut ciphertext = vec![0; ciphertext_len];
         let key = self
             .key
@@ -227,7 +229,7 @@ impl MessageEncrypter for RecordCipher {
             key,
             &plain,
             &mut ciphertext,
-            &make_tls13_aad(ciphertext_len),
+            &record::aad(ciphertext_len),
             &aead::nonce(self.iv.as_ref(), seq).ok_or(Error::EncryptError)?,
         )
         .map_err(|_| Error::EncryptError)?;
@@ -240,7 +242,7 @@ impl MessageEncrypter for RecordCipher {
         ))
     }
     fn encrypted_payload_len(&self, len: usize) -> usize {
-        len + 17
+        record::encrypted_payload_len(len)
     }
 }
 impl MessageDecrypter for RecordCipher {
@@ -260,7 +262,7 @@ impl MessageDecrypter for RecordCipher {
             key,
             &mut plain,
             &msg.payload,
-            &make_tls13_aad(msg.payload.len()),
+            &record::aad(msg.payload.len()),
             &aead::nonce(self.iv.as_ref(), seq).ok_or(Error::DecryptError)?,
         )
         .is_ok();
@@ -269,8 +271,20 @@ impl MessageDecrypter for RecordCipher {
             return Err(Error::DecryptError);
         }
         msg.payload.truncate(len);
-        msg.into_tls13_unpadded_message()
+        unpad_message(msg)
     }
+}
+
+// Conversion and error wiring remain shell; byte decisions are proven in record.
+fn unpad_message(mut msg: InboundOpaqueMessage<'_>) -> Result<InboundPlainMessage<'_>, Error> {
+    let unpadded = record::unpad(&msg.payload).map_err(|error| match error {
+        record::UnpadError::Oversized => Error::PeerSentOversizedRecord,
+        record::UnpadError::NoContentType => rustls::PeerMisbehaved::IllegalTlsInnerPlaintext.into(),
+        record::UnpadError::ChangeCipherSpec => rustls::PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into(),
+    })?;
+    msg.typ = ContentType::from(unpadded.typ);
+    msg.version = ProtocolVersion::TLSv1_3;
+    Ok(msg.into_plain_message_range(0..unpadded.len))
 }
 
 #[derive(Debug)]
@@ -291,7 +305,7 @@ impl SignatureVerificationAlgorithm for P256Verify {
         use libcrux_ecdsa::p256::{PublicKey, Signature};
         let invalid = |_| pki_types::InvalidSignature;
         // TLS/webpki use an uncompressed SEC1 point, not arbitrary raw coordinates.
-        if public.len() != 65 || public[0] != 4 {
+        if !record::p256_point_shape(public) {
             return Err(pki_types::InvalidSignature);
         }
         let public = PublicKey::try_from(public).map_err(invalid)?;
@@ -358,8 +372,8 @@ impl fmt::Debug for P256Signer {
 }
 impl SigningKey for P256SigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
-        offered
-            .contains(&SignatureScheme::ECDSA_NISTP256_SHA256)
+        let offered: Vec<u16> = offered.iter().copied().map(u16::from).collect();
+        record::offers(&offered, 0x0403)
             .then(|| Box::new(P256Signer(self.scalar.clone())) as Box<dyn Signer>)
     }
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -647,6 +661,8 @@ mod tests {
             case.join().unwrap();
         }
     }
+
+    include!("io_deadline_tests.rs");
 
     trait TestStream: Read + Write {}
     impl<T: Read + Write> TestStream for T {}
@@ -1014,3 +1030,7 @@ mod tests {
         assert_eq!(hash.fork_finish().as_ref(), Sha256.hash(b"ab").as_ref());
     }
 }
+
+#[cfg(test)]
+#[path = "record_tests.rs"]
+mod record_tests;

@@ -9,6 +9,10 @@ measured and shrinking" is. Measured with [formal-coverage](https://github.com/g
 compiler, package manager or shared libraries. Read-only filesystem, no Linux capabilities,
 non-root.
 
+After stage 16, measured with the per-stage method in [EVOLUTION.md](EVOLUTION.md): **1,208 of
+1,861 lines of running server code proven (64.9%)**. The stage-13 baseline below uses a different
+counting rule and is not comparable.
+
 First-party security-relevant code: **644 of 1,363 SLoC proven (47.25%)**, measured by
 [formal-coverage v1.4](https://github.com/gumshoe2020/formal-coverage) at `2fa5eb7`;
 300 tested, 419 unverified. Counting rule: package source SLoC, with the security

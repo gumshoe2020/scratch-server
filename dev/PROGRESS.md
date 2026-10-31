@@ -234,3 +234,72 @@ Evidence: logs/stage13-*.
 - F2: complete — repaired historical coverage labels, restored the plan's own examples and public-scan command, fixed prose punctuation, pinned the advisory source by a real fetched NAR hash, renamed the image and aligned the acceptance helper, and fixed certificate help and uid 65532 mount instructions. Fenced Markdown code is unchanged. Main needs no changes.
 - Local verification: ./verify.sh reports 211/237/9 verified, zero errors; cargo test --locked --workspace passes 31/31; the full mutant rerun kills 15/15 with zero survivors/invalid runs; Nix check, static image, complete container acceptance and public scans on both branches pass. Proof/spec/test/mutant sources remain unchanged except the acceptance helper's exact image-name literals. No independent, x86_64, LAN or physical-browser rerun is claimed.
 - Final post-commit clean-tree replay and resource cleanup are logged under <tmp>/release-fix-logs/final-*.log. No push, history rewrite or other-stage branch edits.
+
+
+# Stages 14–16
+
+
+## Stage 16 — proven-io
+
+Resumed at 401bbe2 after Andrew approved the admission-overflow exception.
+The guarded core fix and the ten-second request deadline are the only permitted
+behavior changes. All Codex acceptance commands pass, including build/live/mutants. Ready for
+Dudley's independent acceptance and coverage measurement. Historical blocker
+evidence is retained below.
+
+- [x] `./verify.sh`: new properties, zero errors; prohibited-token scan; PROOFS.md property locations.
+- [x] `cargo test --workspace`: inherited tests plus full deadline/classification/admission/port oracles.
+- [x] Plain TCP and TLS deadline tests: trickle 400 in 10–12 s, complete over 8 s 200, idle 3 s 200, idle 17 s zero bytes.
+- [x] Stage 13 spec mutants: 15/15 killed in temporary copies, zero survivors/invalid; all refinement gates pass (logs/stage16-mutants/results.json).
+- [x] `./nix-build.sh check` and `image-static`: static, shell-free, key-free image tagged proven-io:static.
+- [x] Hardened proven-io on 8098: stage 15 live suite, response/log equivalence to 8097, comparative trickle test.
+- [x] Protected containers untouched; branch remains proven-io; no push or protected-document changes.
+- [x] TRUSTED-BASE.md complete function inventory/subtotals; NOTES.md moved/added functions and before/after SLoC (63 shell functions / 618 SLoC; audit receipt logs/stage16-function-inventory.json).
+
+Blocker validation (separate from stage acceptance):
+
+- [x] Debug and release admission evidence tests: 201 matching counts and the required MAX boundary, two tests passed in each profile.
+- [x] Baseline workspace validation: 46 passed, including all 44 inherited tests; prohibited-token scan zero matches across 19 Rust files.
+- [x] Baseline `./verify.sh`: 211/0 parser, 298/0 transport, 9/0 standalone AEAD; no new proofs claimed.
+
+## Stage 15 — plaintext capacity fix
+
+Preallocate `inner_plaintext` for payload plus content type; preserve its contract.
+Add an exact-capacity regression for payload lengths 0, 1, 255 and 16,384.
+
+- [x] Verus roots: 211/0 parser, 298/0 transport, 9/0 AEAD; no proof adjustment.
+- [x] Stage 15 prohibited-construct scan: zero matches across 18 tracked Rust files.
+- [x] Full workspace suite: 44 passed (43 inherited tests plus one capacity test).
+- [x] Spec-mutant campaign: 15/15 killed, zero survivors/invalid; all refinement phases pass.
+
+Receipts use `logs/stage15-capacity-`; independent acceptance remains Dudley's.
+
+## Stage 14 — proven-dispatch
+
+Implementation resumed after Andrew approved resolution A in spec amendment 0cb7016.
+Bare CR/LF compatibility tests are retained. All stage acceptance commands passed;
+ready for Dudley's independent acceptance and coverage measurement.
+
+- [x] `./verify.sh`: final source 211/0 parser, 285/0 transport, 9/0 AEAD; prohibited-token scan zero matches; PROOFS.md lists properties/locations and remaining shell (logs/stage14-verify-final.log).
+- [x] `cargo test --workspace`: all 31 existing tests plus 8 evidence/equivalence/dispatch tests (39 total), logs/stage14-tests-final.log.
+- [x] `python3 scripts/spec-mutants.py`: 15/15 killed, 0 survivors, 0 invalid; every refinement phase passed; runtime/config/fixture hashes unchanged (logs/stage14-mutants/results.json).
+- [x] `./nix-build.sh check` and `./nix-build.sh image-static`: final aarch64-linux checks pass; exported image is static, shell-free and key-free (stage14-nix-final-check/image/live logs).
+- [x] Live hardened `proven-dispatch` on 8096: TLS/curl, delayed 200, idle 0 bytes, all browser fixtures, 48 malformed cases; 14 byte-identical rejection responses/stdout comparisons with 8095 (logs/stage14-live.log).
+- [x] NOTES.md inventory of every moved/added function, location, proven/shell/test status and SLoC (logs/stage14-inventory.py and JSON receipt).
+
+### Preserved compatibility evidence (resolved by 0cb7016)
+
+- [x] Preserve bare-CR/bare-LF name spans and strict-policy diagnostics under resolution A.
+- [x] Run unchanged baseline Verus roots and workspace tests with the evidence tests: `./verify.sh` 211/0 parser, 237/0 transport, 9/0 AEAD; workspace 34/0; prohibited-token scan zero matches.
+
+## Stage 15 — proven-record
+
+All listed commands passed. Ready for Dudley's independent acceptance and coverage measurement.
+
+- [x] `./verify.sh`: 211/0 parser, 298/0 transport, 9/0 AEAD; prohibited-token scan zero matches; PROOFS.md updated (logs/stage15-core-verify-final.log).
+- [x] `cargo test --workspace`: 43/0, all 39 inherited tests unchanged plus four record equivalence tests (logs/stage15-tests.log).
+- [x] `python3 scripts/spec-mutants.py`: 15/15 killed, 0 survivors/invalid, all refinement phases pass; working-tree hashes preserved (logs/stage15-mutants/results.json).
+- [x] `./nix-build.sh check` and `./nix-build.sh image-static`; static, shell-free, key-free inspection passed (stage15-nix-check/image/live logs).
+- [x] Hardened `proven-record` on 8097; TLS/curl, delay/idle, browser fixtures; 18 byte-identical response/log comparisons with 8096 (logs/stage15-live.log).
+- [x] Protected containers unchanged: identity/pid/start-time snapshots compare equal with `cmp` (stage15-protected-before/after.log).
+- [x] NOTES.md complete moved/added function inventory and TLS per-function before/after SLoC (logs/stage15-inventory.py, stage15-function-inventory.json).

@@ -82,12 +82,13 @@ method/path. The unchanged trust boundary below still applies.
 - Allocation success and execution resources. Out-of-memory aborts, OS failure,
   stack exhaustion outside the verified recursive depth, and timing side channels
   are outside the verifier's safety model.
-- Rejection diagnostics (status and sanitized/truncated unknown header name only)
-  are trusted transport code, covered by tests rather than a formal proof. Header
-  values are never included in diagnostics.
-- Socket acquisition, clock/deadline delivery, TLS framing, application route/body
-  selection, response writes/flushes, healthcheck, kernel, Docker and hardware remain
-  unverified. Stage 8 proves the byte/event core and formatter below.
+- The Stage 14 application core below proves rejection diagnostics, sanitization,
+  routing, response plans and the log limiter. Shell wiring to IO remains trusted.
+  Header values are never included in diagnostics.
+- Socket acquisition, clock/deadline delivery and millisecond conversion, TLS
+  framing, filesystem-derived root body, atomic/lock/stdout effects, response
+  writes/flushes, healthcheck, kernel, Docker and hardware remain unverified.
+  Stages 8 and 14 prove byte/event, formatter and application decisions below.
 - Stage 5 TLS protocol state machine, record layer, certificate validation and
   custom provider adapters remain trusted except for the stage 8 helpers below. See TLS-PROVIDER.md for upstream primitive
   claims and unconfirmed release/target correspondence. No end-to-end TLS proof.
@@ -305,3 +306,226 @@ First-party security-relevant code: **644 of 1,363 SLoC proven (47.25%)**, measu
 boundary defined by formal-coverage's scratch-server config. Shipped third-party
 runtime dependencies: **336,654 SLoC (not proven)**, for aarch64-unknown-linux-musl.
 This is the stage-13 baseline measurement, not a new measurement of this release pass.
+
+
+## Stage 14 (2026-10-30): proven dispatch
+
+`./verify.sh` passes **211 verified / 0 errors** parser, **285 / 0** transport,
+**9 / 0** standalone AEAD. Roots overlap as before. The existing transport root
+now includes `crates/transport-core/src/app.rs`, with 48 additional verification
+results. Cargo erases ghost code from the same source. No existing contract or
+proof was weakened, and no exemption was introduced. These results supersede
+the historical application-shell boundary statements above.
+
+All locations below refer to `crates/transport-core/src/app.rs`:
+
+- `route:25`, `route_status:39`, `status_code:45`, `status_agrees:49`: exact Health
+  iff `/health`, Root iff `/`, NotFound otherwise for arbitrary bytes. The shared
+  route_status maps both successful routes to Ok and all other paths to NotFound.
+  Numeric status codes correspond exactly to fixed wire status lines. The shell
+  selects a route once; `unknown_line:531` and `task_response:77` both use this
+  same route and route_status function, connecting logged code to sent status.
+- `plan:57`: Dispatch carries one counter increment, all other actions zero, and
+  Task preserves the request or rejection reason exactly. `task_response:77`
+  can yield a 200/404 response only for Dispatch. Every Reject uses status 400,
+  fixed body `bad request\n`, Content-Length 12 and head=false, regardless of
+  diagnostics. ReadMore/CloseSilently/Done return None (zero bytes to write).
+  Dispatch HEAD retains the same headers/body length and emits no body. Dynamic
+  root content is a shell-supplied arbitrary slice. Its only formatter failure
+  is an unrepresentable total non-HEAD length, as in Stage 8. The shell's atomic
+  invocation and actual successful write remain IO assumptions, not Verus claims.
+- `scan_line:164`, `scan_colon:187`, `next_header_name:248`: exact refinement of
+  `line_end`, `colon_end`, `next_from` and `next_spec`. Yields bounded ordered
+  spans after the first request-line CRLF and no later than `stop:206`, the first
+  empty diagnostic line. Names contain neither colon nor any CRLF pair. Bare
+  CR or LF remains permitted under Andrew's resolution A (0cb7016). Every next
+  cursor strictly advances; every scan is in bounds and terminates. Rescanning
+  from the request line enforces the empty-line boundary for arbitrary cursors.
+- `sanitize:133`, `filtered:124`, `sanitize_spec:130`: exact stable ASCII
+  alphanumeric-or-hyphen filter followed by take 64, output length <=64, every
+  output byte in that alphabet. This excludes CR/LF, spaces, equals and controls
+  from client-supplied log content even for malformed diagnostic names.
+- `decision:291`, `diagnose_from:300`, `diagnose:317`: exact first-match diagnostic
+  walk. More than 24 names wins before classification; hard class 19..27 wins
+  next, followed by duplicate Host/Connection, non-drop guarded/unknown policy,
+  and finally Grammar. Count, Host and Connection state are explicit in the
+  independent recursive specification. All arbitrary input bytes and all policy
+  values are covered. It is a diagnostic model, not a new acceptance grammar.
+- `diagnostic_line:370`, `prefix:348`, `diagnostic_spec:365`: output equals one of
+  six closed prefixes plus precisely sanitize(name) where a name is carried.
+  Span validity is required and supplied by diagnose. Every output byte is
+  printable ASCII and length <=128. `rejection_line:497` preserves the fixed
+  Size/Slow strings and delegates Grammar to that diagnostic model.
+- `lowercase:409`, `prune:437`, `UnknownLog::new:461`, `should_log:464`: lowercase
+  storage, exact stable expiry filter, cap=min(limit,64) preserved for the
+  immutable server limit, case-insensitive deduplication, and true iff there is
+  room and no folded name is already retained. A true result appends precisely
+  one (name, now) entry to the retained old sequence; false only prunes. Exact
+  subtraction is guarded by now>=timestamp; rollback retains future entries.
+  Production names are accepted ASCII tokens, where raw ASCII folding equals
+  the old String conversion. The core also safely handles arbitrary byte names.
+- `retain_recent:569`, `window_accounting:593`, `sliding_window_bound:611`: induction
+  over arbitrary finite traces of should_log's transition contract. Entries
+  created within any half-open 60,000 ms window cannot be pruned inside it;
+  counting emitted entries therefore bounds emissions by min(limit,64). Applying
+  the theorem to contiguous calls in each window of non-decreasing now_ms gives
+  the bound in every sliding minute, not just aligned buckets. No bounded model
+  checking or finite-only proof is used. Rollback stays safe but has no liveness
+  claim. The shell's requested millisecond clock resolution is trusted.
+- `next_unknown:510`, `unknown_line:531`, `needs_root:494`: pure accepted-request
+  log filtering, fixed status/name-only formatting with sanitized name, and root
+  filesystem-work selection. Unknown output also has printable ASCII and <=128
+  bounds. Actual stdout/lock errors remain shell effects.
+
+### Still unverified shell and trust boundary
+
+`src/lib.rs`: ServerState construction and immutable policy/clock ownership,
+Instant sampling/conversion, Mutex and AtomicUsize effects, stdout acquisition
+and writes, filesystem existence checks and root String formatting, socket
+read/error mapping and callback delivery, write_all/flush and error propagation.
+Test-only adapters and preserved oracles are empirical checks, not proven code.
+`src/main.rs`, `src/transport.rs` and `src/tls.rs` are unchanged and retain their
+previous trust boundary (including the proven AEAD helpers). Allocation success,
+OS scheduling, real-time deadlines, upstream TLS/crypto correctness, codegen and
+hardware remain trusted. No end-to-end TLS, filesystem or wall-clock proof is
+claimed. Dudley's independent acceptance and coverage measurement remain separate.
+
+The workspace suite additionally checks 100,000 malformed/browser-derived blocks
+(100,000 name sequences and 300,000 diagnostic comparisons across three policies),
+256 single-byte and 10,000 random sanitizer names, 84,008 paired limiter calls,
+rollback boundaries, plus GET/HEAD routing and handler counts. These are empirical
+equivalence checks, not substitutes for the universal Verus contracts above.
+No new formal-coverage percentage is claimed; Dudley measures stage 14 separately.
+
+Stage 14 empirical acceptance also passes: aarch64-linux Nix check/static image,
+39 workspace tests and 15/15 spec mutants (all refinement phases preserved).
+The hardened 8096 deployment passes the inherited TLS/curl/browser/malformed/
+idle/slow/capacity suite; fourteen rejection responses and stdout suffixes match
+8095 byte-for-byte. Static/key-free/shell-free image inspection is empirical,
+not a new Verus claim. See NOTES.md and MUTANTS.md for receipts and limitations.
+
+## Stage 15: record decisions
+
+The new `crates/transport-core/src/record.rs` is included under the existing
+transport root, using the same ghost-erased source for Cargo. No upstream call
+is modeled with a fabricated contract. `./verify.sh` passes **211/0 parser,
+298/0 transport, 9/0 standalone AEAD**; roots overlap. The record module adds
+13 verification results and seven executable helpers (57 runtime source SLoC).
+
+- `record.rs:13`, `unpad`: exact pre-size precedence, trailing-zero removal,
+  missing-type and CCS rejection, post-size check. Success identifies the last
+  nonzero byte, with type neither zero nor 20, len < input length and <=16,384;
+  all later bytes are zero. NoContentType iff input length <=16,385 and every
+  byte is zero (`all_zero:10`). Oversized iff initial length >16,385. The second
+  size check is retained in rustls order even though the initial bound makes it
+  unreachable. Arbitrarily long inputs are rejected before scanning.
+- `record.rs:46`, `aad`: fixed 0x17/0x03/0x03 prefix and exact truncated high/low bytes
+  for every usize; their big-endian decoding equals len below 65,536. The
+  bit-vector proof covers both Verus usize widths.
+- `record.rs:57`, `inner_plaintext`: Some iff inherited `aead::sealed_len` accepts,
+  exact payload concatenated with one type byte, output length + TAG_LEN equals
+  that sealed length. Uses sealed_len's existing contract, without duplicating
+  its implementation or weakening it. `encrypted_payload_len:75` equals the
+  same length when representable and otherwise saturates at usize::MAX, the
+  single authorized behavior change.
+- `record.rs:81`, `x25519_peer`: Some iff exactly 32 bytes, identical contents.
+  `p256_point_shape:95`: exactly length 65 and prefix 4. Neither proves curve
+  arithmetic or validates the cryptographic point.
+- `record.rs:98`, `offers`: true iff an element equals wanted, for every slice
+  and u16 wanted. Shell converts SignatureScheme to u16 and requests 0x0403.
+
+All loops terminate with explicit decreasing lengths; bounds, overflow and
+panic freedom are verified under the existing allocation-success model.
+
+### TLS shell still unverified
+
+`src/tls.rs` retains every trait impl and upstream call. In particular:
+RecordCipher's OutboundChunks gathering, Zeroizing ownership, allocation, key
+conversion, libcrux authentication/encryption result wiring, rustls payload
+truncation, and `unpad_message`'s error/type/version/range conversions remain
+shell. The pure AAD, unpadding, inner construction and encrypted-length decisions
+are now proven; their trait wiring is tested, not proven. Exchange's random
+secret, clamp/public derivation, libcrux ecdh and all-zero rejection remain shell;
+only peer shape/copy is proven. P256Verify retains public-key parsing, DER codec
+and libcrux verification; P256SigningKey retains enum conversion, allocation and
+signer selection wiring around proven membership. All hash/HMAC/HKDF adapters,
+OsRandom, private-key loading/DER parsing, signing, provider/config construction
+and loading remain unverified. Rustls's handshake/state machine and protocol
+framing, upstream crypto correctness/provenance, allocation, cleanup, compiler,
+OS and hardware remain trusted. No end-to-end TLS proof is claimed.
+
+Stage 15 empirical checks additionally pass: 43 workspace tests (39 inherited),
+100,000 unpadding, 80,001 AAD, 10,000 inner/encrypted-record, 20,019 length,
+25,856 each peer/point and 20,000 membership comparisons, with no oracle
+differences. Nix aarch64-linux repeats 211/298/9 with zero errors and 43 tests.
+Hardened 8097 live TLS, browser fixtures, delay/idle, image inspection and eighteen
+response/stdout comparisons with 8096 pass. These are tests, not extra proofs.
+
+The stage 15 spec-mutant campaign passes **15/15 killed**, no survivors or
+invalid runs. All pre-intent refinement phases pass, including the new record
+core; thirteen focused intent lemma kills and fifteen workspace-test kills.
+See MUTANTS.md and logs/stage15-mutants/results.json for empirical receipts.
+
+## Stage 16: startup and I/O decisions
+
+`./verify.sh` passes **211 parser / 317 transport / 9 standalone AEAD verified,
+zero errors** (overlapping roots). The new `crates/transport-core/src/io.rs`
+adds 19 verification results, including five executable helpers (52 runtime
+function SLoC). Existing contracts/lemmas/tests are retained. Cargo executes the
+same source after ghost erasure. All claims quantify over all representable
+inputs, not a finite model checker.
+
+Locations below refer to `crates/transport-core/src/io.rs`:
+
+- `read_timeout:26`, `request_end:13`, `timeout_spec:17`: exact 15-second idle
+  subtraction before the first byte; thereafter the smaller of two seconds and
+  the remaining ten-second request budget, with saturating deadline addition.
+  None iff expired; every returned duration is positive, idle elapsed+duration
+  <=15s, started duration<=2s and elapsed+duration<=saturated deadline.
+  `deadline_bound:51` proves every scheduled expiration is <=t+10s (integer
+  arithmetic) after first byte t, or <=15s without one. Applying this universally
+  to successive reads with the same first-byte time prevents the schedule from
+  extending the request clock. OS delivery and physical elapsed time are trusted.
+- `classify:62`: exact Data(0)/Data(n>0)/Interrupted/Timeout/Other mapping to
+  Eof/Bytes/Retry/ReadTimeout/Fail. The returned starts flag is true iff Bytes;
+  EOF, timeout and error never raise the flag. Handshake-only IO is kept outside
+  classification by the trusted rustls shell boundary, not a modeled TLS proof.
+  The shell alone owns sampling and the write-once Cell<Option<u64>>; it calls
+  the callback only on this flag and never overwrites an existing timestamp.
+- `admit:84`, `release:90`, `admission_result:78`, `release_result:81`,
+  `admission_round_trip:95`: guarded addition iff active<64, result in 1..=64,
+  rejection for all larger counts including MAX, saturating subtraction without
+  underflow, and the composition of the two result specifications equals the
+  initial count after any successful admission. The shell uses fetch_update
+  for both effects. The approved old debug-overflow difference is recorded in
+  PROVEN-IO.md; the historical reproducer remains a passing evidence test.
+- `parse_port:123`, `port_start:101`, `digit_range:104`, `port_form:107`,
+  `decimal_prefix:112`: None input defaults to 8080. Present input succeeds iff
+  one optional leading '+' is followed by at least one ASCII digit, whose
+  mathematical decimal value is the returned u16. Rejection proves there is no
+  u16 with that form/value. Prefix induction proves an overflowing prefix cannot
+  become a valid bounded value later; leading zero runs of arbitrary length are
+  accepted. Every loop terminates with bounds/overflow checked. Shell env::var
+  maps unset and non-UTF-8 to the default; no UTF-8 claim is fabricated in core.
+- `sizes_agree:180`: HASH_LEN equals aead::KEY_LEN (32), X25519_LEN=32 and
+  P256_POINT_LEN=65. record.rs:82 uses X25519_LEN in its return array, length
+  checks, loop bounds and exact-copy contract; record.rs:96 uses P256_POINT_LEN
+  for the shape predicate. TLS output_len/hash_len/key_len return core constants
+  and retain their unverified trait-method status.
+
+The complete remaining handwritten first-party production shell is catalogued
+function by function in TRUSTED-BASE.md: **63 functions / 618 SLoC**, with reasons,
+finite test coverage and explicit gaps. No contracts for clocks, syscalls,
+threads, atomics, rustls/libcrux calls, allocation or secret cleanup are invented.
+Only the approved request deadline and admission-overflow fix change behavior.
+No end-to-end TLS, secrecy/timing, syscall precision or wall-clock liveness proof
+is claimed. Independent acceptance and compiled-files coverage are Dudley's.
+
+Stage 16 empirical acceptance passes: 52 workspace tests on native and Nix ARM,
+15/15 spec mutants (all refinement gates preserved), static/key-free/shell-free
+image, hardened 8098 live suite, 18 byte-identical response/stdout comparisons
+with 8097, and the comparative trickle test (400/slow at 10.058 s vs old 200 at
+51.023 s). These are finite checks, not additional proofs. The live 64-slot
+capacity fill is explicitly omitted under Andrew's prohibition; core admission
+proofs and local atomic tests cover the cap. No physical-browser, separate-LAN
+or x86_64 validation is claimed.

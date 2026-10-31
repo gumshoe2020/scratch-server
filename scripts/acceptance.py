@@ -21,6 +21,8 @@ PARSER = argparse.ArgumentParser(description=__doc__)
 PARSER.add_argument('--container', default='scratch-server')
 PARSER.add_argument('--port', type=int, default=8443)
 PARSER.add_argument('--host', default='localhost')
+PARSER.add_argument('--image-tag', default='scratch-server:static')
+PARSER.add_argument('--skip-capacity', action='store_true', help='Omit the 64-socket probe when the operator prohibits filling the cap')
 PARSER.add_argument('--tls-dir', type=Path, default=ROOT.parent / 'scratch-server-tls')
 PARSER.add_argument('--lan-host', default=os.environ.get('LAN_HOST'))
 ARGS = PARSER.parse_args()
@@ -59,7 +61,7 @@ def main():
     assert container["Config"]["User"] == "65532:65532"
     image = json.loads(docker("image", "inspect", container["Image"]))[0]
     assert image["Size"] < 8_000_000
-    assert "scratch-server:static" in image["RepoTags"]
+    assert ARGS.image_tag in image["RepoTags"]
     assert "SCRATCH_HEADER_POLICY=/config" in container["Config"]["Env"]
     mounts = container["Mounts"]
     policy_mount = [m for m in mounts if m["Destination"] == "/config"]
@@ -202,7 +204,7 @@ def main():
     result = dict(date=datetime.now(timezone.utc).isoformat(), image=image["Id"], size=image["Size"],
                   binary_bytes=len(binary), malformed=len(corpus), static=True, shell=False,
                   hardened=True, routes=True, healthcheck=True, safari=True, firefox=True, brave=True, brave_cache_disabled=True, cookie_log=True, tls=True,
-                  idle=True, slow=True, capacity=True, log_probe_requests=1000, log_probe_names=100, log_bound=60, log_lines=len(notes), lan_host=lan_host)
+                  idle=True, slow=True, capacity=not ARGS.skip_capacity, log_probe_requests=1000, log_probe_names=100, log_bound=60, log_lines=len(notes), lan_host=lan_host)
     (LOGS / "stage12-acceptance.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 
@@ -278,22 +280,23 @@ def idle_checks():
             stream.sendall(wire)
             assert read_all(stream).startswith(b"HTTP/1.1 400 Bad Request\r\n")
         assert docker("logs", NAME).splitlines()[len(before):] == [line]
-    # Fill workers with no-handshake sockets, then prove excess sockets are closed.
-    sockets = []
-    try:
-        time.sleep(0.2)
-        for _ in range(64):
-            sockets.append(socket.create_connection((HOST, PORT), timeout=3))
-        time.sleep(0.3)
-        before = docker("logs", NAME).splitlines()
-        with socket.create_connection((HOST, PORT), timeout=3) as excess:
-            excess.settimeout(2)
-            assert excess.recv(1) == b""
-        added = docker("logs", NAME).splitlines()[len(before):]
-        assert "closed reason=capacity" in added, added
-    finally:
-        for stream in sockets:
-            stream.close()
+    if not ARGS.skip_capacity:
+        # Fill workers with no-handshake sockets, then prove excess sockets are closed.
+        sockets = []
+        try:
+            time.sleep(0.2)
+            for _ in range(64):
+                sockets.append(socket.create_connection((HOST, PORT), timeout=3))
+            time.sleep(0.3)
+            before = docker("logs", NAME).splitlines()
+            with socket.create_connection((HOST, PORT), timeout=3) as excess:
+                excess.settimeout(2)
+                assert excess.recv(1) == b""
+            added = docker("logs", NAME).splitlines()[len(before):]
+            assert "closed reason=capacity" in added, added
+        finally:
+            for stream in sockets:
+                stream.close()
     time.sleep(0.3)
     with connect(HOST) as stream:
         stream.sendall(b"GET /health HTTP/1.0\r\n\r\n")

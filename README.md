@@ -1,10 +1,11 @@
 # scratch-server
 
 A small HTTPS server exploring how much of a network boundary can be proved.
-This is stage 13 (`spec-lemmas`): a strict GET/HEAD HTTP subset, configurable
-header policy, Verus transport core and response formatter, plus intent lemmas
-and deliberate spec mutants. The [stage index](EVOLUTION.md)
-shows the earlier designs. [ATTACK-SURFACE.md](ATTACK-SURFACE.md) names the remaining trusted pieces. The historical build record lives in [dev/](dev/README.md).
+This is stage 16 (`proven-io`): a strict GET/HEAD HTTP subset, configurable
+header policy, and a Verus core covering the parser, transport state, response
+formatting, dispatch and diagnostics, TLS record helpers, read deadlines and
+connection admission, plus intent lemmas and deliberate spec mutants. The [stage index](EVOLUTION.md)
+shows the earlier designs. [ATTACK-SURFACE.md](ATTACK-SURFACE.md) names the remaining trusted pieces and [TRUSTED-BASE.md](TRUSTED-BASE.md) lists every unproven production function. The historical build record lives in [dev/](dev/README.md).
 
 ## Threat model and assurance
 
@@ -17,8 +18,13 @@ by default; guarded headers reject unless explicitly configured to drop.
 [HEADER-POLICY.md](HEADER-POLICY.md) defines the policy and configuration grammar.
 
 Proven against written specs: parser acceptance and bounds for all inputs,
-transport event/byte state transitions, response formatting, and selected AEAD
-helpers. Intent lemmas check non-vacuity, attacks and universal properties of the
+transport event/byte state transitions, response formatting, selected AEAD
+helpers, routing, rejection diagnostics, log sanitizing and the unknown-header
+log limiter ([PROVEN-DISPATCH.md](PROVEN-DISPATCH.md)), TLS record unpadding,
+AAD, inner-plaintext and key-share shape checks
+([PROVEN-RECORD.md](PROVEN-RECORD.md)), and read deadlines, read
+classification, connection admission and port parsing
+([PROVEN-IO.md](PROVEN-IO.md)). Intent lemmas check non-vacuity, attacks and universal properties of the
 spec. See [PROOFS.md](PROOFS.md), [INTENT.md](INTENT.md) and
 [VERIFIED-BOUNDARY.md](VERIFIED-BOUNDARY.md). Proofs cannot establish that the spec
 captures every security requirement. Fifteen [spec mutants](MUTANTS.md) exercise
@@ -26,8 +32,8 @@ specific mistakes, with refinement proofs checked before intent/test failures.
 
 Tested: 100,000 differential inputs under three policies, 10,000 generated
 configs, malformed requests, real loopback TLS, fragmentation, deadlines and
-exact route dispatch. Trusted: I/O adapters, clocks, threading, admission,
-rustls protocol logic, X.509/key parsing, OS randomness, compiler, verifier,
+exact route dispatch. Trusted: I/O adapters, clocks, threading, atomic
+connection counters, rustls protocol logic, X.509/key parsing, OS randomness, compiler, verifier,
 kernel and container runtime. A shell-free image still depends on the host kernel.
 
 ## Build and run
@@ -73,8 +79,10 @@ argument. For LAN tests supply that host and `--lan-host HOST` to acceptance.py.
 default applies. Invalid/unreadable config fails before binding. See
 [config/header-policy.conf](config/header-policy.conf) and the strict variant.
 At most 64 connections run concurrently. An absolute 15-second budget includes
-TLS handshaking before the first HTTP byte; expiry closes silently. Subsequent
-reads and writes have two-second timeouts. Each connection serves one request.
+TLS handshaking before the first HTTP byte; expiry closes silently. Once the
+first request byte arrives, the whole request must finish within 10 seconds
+(otherwise `400`, logged `reason=slow`), with at most two seconds between reads.
+Writes have two-second timeouts. Each connection serves one request.
 Logs retain sanitized names/status, never values; unknown-name logging is bounded.
 
 ## Verify

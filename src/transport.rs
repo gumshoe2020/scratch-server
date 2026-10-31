@@ -1,5 +1,6 @@
 //! Trusted socket deadlines shared by plaintext and TLS request paths.
 use crate::{serve_with_started, ServerState};
+use transport_core::io as core_io;
 use std::{
     cell::Cell,
     io::{self, Read, Write},
@@ -9,25 +10,21 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const IDLE_TIMEOUT: Duration = Duration::from_secs(15);
-pub const READ_TIMEOUT: Duration = Duration::from_secs(2);
+pub const IDLE_TIMEOUT: Duration = Duration::from_nanos(core_io::IDLE_NS);
+pub const READ_TIMEOUT: Duration = Duration::from_nanos(core_io::READ_NS);
 
 struct DeadlineSocket {
     socket: TcpStream,
-    idle_until: Instant,
-    started: Rc<Cell<bool>>,
+    accepted: Instant,
+    started: Rc<Cell<Option<u64>>>,
 }
 
 impl Read for DeadlineSocket {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        let timeout = if self.started.get() {
-            READ_TIMEOUT
-        } else {
-            self.idle_until
-                .checked_duration_since(Instant::now())
-                .filter(|d| !d.is_zero())
-                .ok_or_else(|| io::Error::from(io::ErrorKind::TimedOut))?
-        };
+        let elapsed = elapsed_ns(self.accepted);
+        let timeout = core_io::read_timeout(elapsed, self.started.get())
+            .map(Duration::from_nanos)
+            .ok_or_else(|| io::Error::from(io::ErrorKind::TimedOut))?;
         self.socket.set_read_timeout(Some(timeout))?;
         self.socket.read(bytes)
     }
@@ -51,22 +48,33 @@ pub fn serve_tcp(
     accepted: Instant,
 ) -> io::Result<()> {
     socket.set_write_timeout(Some(READ_TIMEOUT))?;
-    let started = Rc::new(Cell::new(false));
+    let started = Rc::new(Cell::new(None));
     let socket = DeadlineSocket {
         socket,
-        idle_until: accepted + IDLE_TIMEOUT,
+        accepted,
         started: Rc::clone(&started),
+    };
+    let mark_started = || {
+        if started.get().is_none() {
+            started.set(Some(elapsed_ns(accepted)));
+        }
     };
     if let Some(config) = tls {
         let conn = rustls::ServerConnection::new(config).map_err(io::Error::other)?;
         let mut stream = rustls::StreamOwned::new(conn, socket);
-        serve_with_started(&mut stream, state, || started.set(true))?;
+        serve_with_started(&mut stream, state, mark_started)?;
         if stream.conn.is_handshaking() {
             return Ok(());
         }
         stream.conn.send_close_notify();
         stream.flush()
     } else {
-        serve_with_started(&mut { socket }, state, || started.set(true))
+        serve_with_started(&mut { socket }, state, mark_started)
     }
+}
+
+// Instant and Duration stay in the trusted shell; the core sees integer ns.
+fn elapsed_ns(accepted: Instant) -> u64 {
+    u64::try_from(Instant::now().saturating_duration_since(accepted).as_nanos())
+        .unwrap_or(u64::MAX)
 }

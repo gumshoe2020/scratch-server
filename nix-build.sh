@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 target="${1:-image-static}"
 case "$target" in image-static|image|server|server-static|check|versions|proof-log|test-log|deny-log|log) ;; *) echo 'unknown Nix target' >&2; exit 2 ;; esac
 mkdir -p logs
-log="$PWD/logs/nix-$target.log"
+log="$PWD/logs/${NIX_LOG_PREFIX:-nix}-$target.log"
 if ! docker run --rm --name "release-nix-$$" -i \
   -v "$PWD":/src -w /src \
   -v scratch-server-nix-store:/nix \
