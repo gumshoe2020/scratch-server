@@ -1,0 +1,49 @@
+[package]
+name = "scratch-server-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "MIT"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+# The production crate: tls::load_config, tls::provider and serve_connection.
+scratch-server = { path = ".." }
+# Same pin as the server; the fuzz lock file starts from the server's Cargo.lock.
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "custom-provider"] }
+
+# Its own workspace, so the server workspace (and its Cargo.lock) never sees this crate.
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "server_first_flight"
+path = "fuzz_targets/server_first_flight.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "server_after_handshake"
+path = "fuzz_targets/server_after_handshake.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "proven_shell_pipeline"
+path = "fuzz_targets/proven_shell_pipeline.rs"
+test = false
+doc = false
+bench = false
+
+# Writes the rustls-client hello and structured seeds (cargo run --example seed_corpus).
+[[example]]
+name = "seed_corpus"
+path = "examples/seed_corpus.rs"

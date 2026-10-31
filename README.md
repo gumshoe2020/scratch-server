@@ -4,7 +4,9 @@ A small HTTPS server exploring how much of a network boundary can be proved.
 This is stage 16 (`proven-io`): a strict GET/HEAD HTTP subset, configurable
 header policy, and a Verus core covering the parser, transport state, response
 formatting, dispatch and diagnostics, TLS record helpers, read deadlines and
-connection admission, plus intent lemmas and deliberate spec mutants. The [stage index](EVOLUTION.md)
+connection admission, plus intent lemmas and deliberate spec mutants. Stage 17 (`rustls-surface`)
+adds no server code: it measures the rustls code we actually ship and fuzzes that configuration
+(see [RUSTLS-SURFACE.md](RUSTLS-SURFACE.md)). The [stage index](EVOLUTION.md)
 shows the earlier designs. [ATTACK-SURFACE.md](ATTACK-SURFACE.md) names the remaining trusted pieces and [TRUSTED-BASE.md](TRUSTED-BASE.md) lists every unproven production function. The historical build record lives in [dev/](dev/README.md).
 
 ## Threat model and assurance

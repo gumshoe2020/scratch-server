@@ -303,3 +303,15 @@ All listed commands passed. Ready for Dudley's independent acceptance and covera
 - [x] Hardened `proven-record` on 8097; TLS/curl, delay/idle, browser fixtures; 18 byte-identical response/log comparisons with 8096 (logs/stage15-live.log).
 - [x] Protected containers unchanged: identity/pid/start-time snapshots compare equal with `cmp` (stage15-protected-before/after.log).
 - [x] NOTES.md complete moved/added function inventory and TLS per-function before/after SLoC (logs/stage15-inventory.py, stage15-function-inventory.json).
+
+## Stage 17 — rustls-surface
+
+- [x] M1 reproducible crate total / compiled / in-binary line and symbol measurements (scripts/rustls-surface-build.sh, scripts/rustls-surface.py; rerun output identical); Results table.
+- [x] Attacker-facing module counts and unused compiled features documented (RUSTLS-SURFACE.md Results, logs/stage17-m1.json).
+- [x] All three cargo-fuzz targets build using the production configuration and shell (`cargo fuzz build -O`, logs/stage17-fuzz-build.log).
+- [x] OpenSSL, curl (Homebrew/OpenSSL and system) and rustls ClientHello seed corpora captured without secrets (scripts/stage17-capture-hellos.py, fuzz/seeds/hellos).
+- [x] Each target fuzzed for 30 minutes, no findings; logs and execution/corpus counts (logs/stage17-fuzz-*.log).
+- [x] Corpus coverage measured against M1 in-binary line sets for all three crates (scripts/stage17-coverage.py, logs/stage17-coverage-summary.txt).
+- [x] Unchanged ./verify.sh passes 211/317/9, zero errors (logs/stage17-verify.log).
+- [x] Unchanged cargo test --workspace passes 52 tests (logs/stage17-cargo-test.log).
+- [x] Scope, branch, secret and runtime-change audit; local checkpoint commits (no diff under src/ crates/ config/ flake.* Cargo.*; no keys tracked; no containers left; not pushed).

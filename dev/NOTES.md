@@ -1534,3 +1534,124 @@ Physical browsers, a separate LAN client, x86_64 and independent acceptance
 were not run. Dudley performs coverage and independent acceptance separately.
 The live capacity-fill check is deliberately omitted under Andrew's explicit
 constraint, with capacity=false in the receipt; the cap is proven/unit-tested.
+
+### Stage 17 — 2026-10-31: setup and measurement choice
+
+Read RUSTLS-SURFACE.md and required stage context. Branch rustls-surface; initial
+untracked codex-run-stage17.log belongs to the calling run and will not be committed.
+No production access change is needed: tls::provider, tls::server_config and
+serve_connection are public. Use native aarch64-apple-darwin release codegen for M1,
+with debug=2 and strip=false only: the existing nix-build.sh invokes docker run,
+which conflicts with the explicit no-container rule, and musl cross-linking is not
+available in this host toolchain. This is the spec's permitted native fallback,
+not a measurement of the Linux image. No containers or formal-coverage touched.
+Memory diary writes are omitted because this stage explicitly forbids writes
+outside the repository and named toolchain/temp exceptions.
+
+### Stage 17 — 2026-10-31 06:46 EDT: M1 measured on the real musl binary (supersedes the native-fallback choice above)
+
+The run continued under Claude after the Codex run stopped. Andrew clarified that ephemeral
+`docker run --rm` build containers like nix-build.sh's are allowed (only long-lived
+containers are forbidden; no existing container touched). So M1 measures the shipped
+target instead of the native fallback: `scripts/rustls-surface-build.sh` builds the flake's
+own `server-static` (aarch64-unknown-linux-musl, release profile, same flake.lock toolchain
+and flags) via `nix build --impure --expr` with `overrideAttrs` adding only
+CARGO_PROFILE_RELEASE_DEBUG=2, CARGO_PROFILE_RELEASE_STRIP=false, dontStrip and
+doCheck=false, and copies rustc's dep-info `.d` files out. flake.nix and nix-build.sh are
+unchanged. Build took about 3 minutes from the existing Nix store volume.
+Codegen check against the shipped binary (extracted from image-static.tar.gz): identical
+.text size (706072 bytes) and address, identical .rodata size; not byte-identical, but
+99.67% of instruction words match as a multiset once PC-relative immediates (b/bl/adr/adrp)
+are masked, i.e. the same code with a different function layout. Recorded as the codegen
+caveat for M1 item 3.
+Counting rules (scripts/rustls-surface.py): sources are the .crate archives from the cargo
+cache, verified against the Cargo.lock checksums and unpacked to $TMPDIR; counter tokei
+15.0.0 "code" lines. Crate total excludes test/bench-only files inside src/ (test.rs,
+*_test.rs, test_macros.rs, *bench.rs); inline #[cfg(test)] modules inside other files
+cannot be separated by tokei and remain in the total. Compiled = files in the crate's
+dep-info. In-binary = distinct (file, line) pairs from DWARF 4 line-table sequences that
+start in an executable section, with relative directories resolved against each CU's
+DW_AT_comp_dir. Functions = defined t/T/w/W symbols in executable sections whose outermost
+llvm-symbolizer frame lies in the crate.
+Finding for item 5: the rustls client role is in the binary (751 in-binary lines) because
+`--healthcheck` connects to our own endpoint with a rustls client. It is not on the accept
+path and not peer-reachable from the network, so it is reported as "not unused" rather
+than as dead code. No logging feature (no `log` crate compiled) and no TLS 1.2 files.
+Attacker-facing module list (item 4) is a fixed file list in the script; extension codecs
+live inside msgs/handshake.rs so they are counted with the handshake codecs.
+
+### Stage 17 — 2026-10-31 07:00 EDT: fuzz harness, seeds, false OOM
+
+`fuzz/` is a cargo-fuzz crate with its own `[workspace]` and its own Cargo.lock (started as
+a copy of the server's, so rustls 0.23.46 / webpki 0.103.16 / pki-types 1.15.1 are the same
+pins); the server workspace and Cargo.lock are untouched (cksum checked after every build).
+Nightly toolchain 1.101.0-nightly (92b5b8c87 2026-10-29) and cargo-fuzz 0.13.2 live in
+~/.rustup and ~/.cargo; homebrew cargo is first on PATH, so the nightly bin directory is put
+first explicitly. All three targets load the production config through
+`scratch_server::tls::load_config` from a throwaway P-256 key made by
+scripts/make-lan-cert.py into $TMPDIR/stage17-tls (never in the repo). No production
+visibility change was needed.
+- `server_first_flight`: byte 0 seeds chunking (0 = one read), rest via read_tls.
+- `server_after_handshake`: full in-memory handshake with a rustls client on our provider,
+  then raw or sealed ops; sealed records use the client's extracted application traffic
+  key/IV with our own ChaCha20-Poly1305 encrypter (the key stays in process memory; nothing
+  logs it). Inner content type 0 lets the payload carry arbitrary padding. Limitation: after
+  a KeyUpdate the harness keeps the old key, so later sealed records fail to decrypt.
+  A `STAGE17_DEBUG` env var prints rustls error variants (no plaintext) for seed checks;
+  the seeds give the expected errors (DecryptError after KeyUpdate, IllegalTlsInnerPlaintext,
+  PeerSentOversizedRecord, ...) and app data is accepted.
+- `proven_shell_pipeline`: `serve_connection` over `rustls::StreamOwned` and an in-memory
+  socket, then the serve_tcp close_notify tail. serve_tcp itself takes a TcpStream for its
+  deadline wrapper, so DeadlineSocket and the timeout paths are not exercised (choice logged).
+  Raw mode feeds wire bytes; client mode embeds a rustls client in the socket so HTTP bytes
+  reach the proven machine after a real handshake.
+Seeds: scripts/stage17-capture-hellos.py ran the native release server on 127.0.0.1:18443
+(binds 0.0.0.0 for under a minute) behind a recording relay on 18444 and captured the
+ClientHello records of openssl s_client (1587 B), Homebrew curl/OpenSSL (1590 B), system
+curl (319 B) and our rustls client (207 B); all four completed with HTTP 200. Only the
+hello records are stored. `cargo run --example seed_corpus write` derives 8/22/18 seeds.
+False OOM, not a finding: a 20 s trial reported an OOM at rss 301 MB after 2 s. Replaying
+that input alone 1/3000/20000 times gives max RSS 48/215/441 MB with ASan defaults but 48 MB
+after 20000 runs with ASAN_OPTIONS=quarantine_size_mb=0: ASan's 256 MB free-quarantine
+counts toward RSS. The fuzz script sets quarantine_size_mb=16 (72-75 MB steady state for
+all three targets), keeping -rss_limit_mb=256 and use-after-free detection.
+Fuzz settings: -fork=2 per target, three targets concurrently (6 workers, within 8),
+-max_total_time=1800, -timeout=1, -rss_limit_mb=256, -ignore_{crashes,timeouts,ooms}=0.
+Inputs are not fully deterministic (server randomness and X25519/ECDSA nonces come from
+getrandom through our provider); accepted, since the provider must not change.
+
+### Stage 17 — 2026-10-31 07:35 EDT: fuzz results, coverage, acceptance
+
+Runs 06:54–07:24 EDT, the three targets at once, 2 forked workers each (6 of the 8 allowed),
+alongside the Bertie spike. All exited 0 after about 1815–1820 s of fuzzing, with
+oom/timeout/crash 0/0/0 throughout and no artifacts, so there are no findings and
+fuzz/findings/ was not created. Executions (last fork-mode status line) and on-disk corpus:
+server_first_flight 29,848,149 / 2410 files; server_after_handshake 595,019 / 476;
+proven_shell_pipeline 671,188 / 1780. The handshake per input costs throughput in the last two
+(about 175–210 exec/s for two workers).
+Coverage: scripts/stage17-coverage.py builds coverage binaries with `cargo fuzz coverage`.
+cargo-fuzz's batched replay logged fewer inputs than the corpus holds, so the script replays
+every corpus and seed file in a single -runs=0 pass and merges with llvm-profdata. The totals
+matched the batched result exactly. Reached = lcov DA lines with count>0, intersected with
+the M1 in-binary (file, line) set by crate-relative path (same source, different codegen:
+the coverage build is not LTO/opt-z, so "reached (any line)" exceeds the in-binary count).
+Result: 1972/4152 rustls, 271/693 webpki, 164/250 pki-types. Two harnesses run a rustls
+client, so the script also reports the figure outside client-role files (1639/3252) and for
+server_first_flight alone (1252), which has no client. Client-role code inside shared
+files (codecs used by both sides) cannot be separated by file.
+Largest unreached in-binary rustls files (unreached/in-binary): enums.rs 448/453,
+client/tls13.rs 257/402, msgs/handshake.rs 253/580, server/tls13.rs 224/351, client/ech.rs
+149/149, client/hs.rs 118/238, error.rs 110/114, tls13/key_schedule.rs 84/239,
+msgs/enums.rs 61/66, msgs/persist.rs 52/52. enums.rs and msgs/enums.rs are almost entirely
+`enum_builder!` macro invocations: DWARF puts the expanded code on the invocation lines,
+but llvm-cov attributes macro-expanded regions to the macro, so those ~510 lines read as
+unreached whatever the fuzzer does. This is a measurement artifact, and the true reached
+figure is higher. The remaining unreached lines were not analysed one by one; that is left
+for Dudley's review and is not a finding.
+Acceptance: verify.sh 211/317/9 verified, 0 errors (logs/stage17-verify.log). cargo test
+--workspace 52 passed (logs/stage17-cargo-test.log). Cargo.lock cksum unchanged after every
+build. `git diff 9d6adbb` touches nothing under src/, crates/, config/, flake.nix,
+flake.lock, Cargo.toml, Cargo.lock, nix-build.sh, verify.sh, EVOLUTION.md or
+ATTACK-SURFACE.md. No tracked file contains a private key; the throwaway key stays in
+$TMPDIR/stage17-tls. The only containers started were the two ephemeral --rm measurement
+builds, and no images were created or left behind. Not pushed.
