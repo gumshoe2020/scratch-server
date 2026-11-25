@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "badges": [
+    "proven",
+    "tested",
+    "unverified",
+    "proof-ratio",
+    "ratchet"
+  ],
+  "labels": {
+    "proven": "proven",
+    "tested": "tested",
+    "unverified": "unverified",
+    "proof-ratio": "proof/code",
+    "ratchet": "ratchet"
+  },
+  "proven_thresholds": [
+    90,
+    75,
+    50,
+    25
+  ],
+  "unverified_thresholds": [
+    10,
+    25,
+    50,
+    75
+  ],
+  "proof_ratio": {
+    "stage": "development",
+    "development": [
+      5,
+      15
+    ],
+    "established": [
+      10,
+      20
+    ],
+    "reason": "Informational proof maintenance cost per proven runtime line"
+  }
+}

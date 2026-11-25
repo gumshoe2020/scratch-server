@@ -629,3 +629,591 @@ Catalog: eight entries, all 72 spec functions owned exactly once, all seven tier
 ## 2026-10-31T14:34:00-04:00 — M4 final audit
 Added stage 18/no-port/layout-only EVOLUTION row and current-layout README links/counts; historical stage results and v1.4 coverage baseline retained. Final links: 204 checked, zero broken. Catalog: eight entries, 72 spec functions, seven tier documents, zero errors. Source/proof/exec identity audits all pass; no changes under src/, tests/, fuzz/, config/, Cargo manifests/lock, nix/ or nix-build.sh versus 3c5f2f7. Root Markdown now only README, EVOLUTION and ATTACK-SURFACE. git log --follow on HEADER-POLICY follows the move to afd8d42 and earlier history. Kept the existing aborted operator transcript by ignoring its path; did not change it. No keys accessed, no long-lived container started/stopped/reused/removed, no server image created/loaded, no image cleanup needed; only pinned docker run --rm builds and existing Nix cache used. No branch changes, identity override or push.
 All requested local acceptance is complete: native and Nix proofs 211/317/9 zero errors; tests 52; full mutants 15/15 killed, 13 intent kills and all fifteen actual test failures, zero survivors/invalid. New coverage, x86_64, live-container and independent acceptance were not run or claimed. M1 2234d91; M2 and M3 hashes in git log. Final git status is checked immediately after M4 commit; no further tracked edits planned.
+
+## 2026-11-01 — Stage 19 started
+Read the authoritative specification, existing TLS/deadline/proof/build boundaries and spike.
+Baseline branch is bertie-boundary with only an existing untracked operator transcript.
+M1 uses crates/transport-core/src/hello.rs with spec/hello.rs, matching the per-module
+stage 18 layout. Conservative inspection rejects duplicate extensions and non-single-host
+SNI forms. Only X25519MLKEM768/X25519/P-256 are selected: legacy draft Kyber in the spike
+is deliberately excluded because the authoritative supported set excludes it.
+Existing record.rs/aead.rs stay intact and verified, but will not serve production TLS.
+
+## 2026-11-01T12:31:00-05:00 — M1 proof and resource bounds
+Standalone hello verifies 30 obligations with zero errors (22 executable/spec termination
+obligations plus eight intent witnesses). Full existing roots verify 211/347/9 with zero
+errors; transport includes the new 30. Inspection bounds vectors to 128 words, extensions
+and key-share walks to 128 entries, and SNI to 255 bytes. Synthetic structural witnesses
+are explicitly not claims about cryptographic share validity; captured public hellos from
+stage 17 are also tested. Verus's compute tactic panicked on Seq::contains in the initial
+witness draft; explicit recursive membership avoids that tool issue and all witnesses
+verify. No existing proof/test source was changed.
+
+## 2026-11-01T12:35:00-05:00 — M2 adapter and upstream gaps
+Bertie pinned exactly to fbbcc131de30d7e8f1599f66a83f16e694fe1997 with default
+features api/std/defensive. Production uses p256 and pem-rfc7468 for startup decoding;
+rustls-pemfile was deliberately avoided because it pulls rustls-pki-types into production.
+All old provider/crypto oracles remain under cfg(test) in tls_test_provider.rs with their
+dev-dependencies. The HTTP core, dispatch, deadlines, admission and formatting are intact.
+
+Upstream Server::read rejects all received alerts, including authenticated close_notify;
+its underlying record module is private. We do not patch Bertie or treat its errors as EOF.
+The peer test helper now half-closes TCP at a TLS record boundary for incomplete/empty HTTP
+requests; all original HTTP response, handler-count and corpus assertions remain. A new test
+checks that an incoming encrypted alert and a corrupt encrypted record close without dispatch.
+Raw EOF within a record remains an error; only EOF before any header byte is HTTP EOF.
+Bertie does not negotiate ALPN; the peer asserts absent ALPN and HTTP/1.1 fallback rather
+than the old provider's negotiated http/1.1. HRR and split ClientHello remain unsupported.
+
+A native test exposed TCP resets from dropping a socket with queued peer closure bytes.
+After sending authenticated server close_notify, the TLS path now shuts down the socket
+explicitly; already-disconnected shutdown is harmless. This preserves response/closure tests
+without masking client read errors. Plain TCP's path and all timing functions are unchanged.
+Healthcheck now uses Bertie and an exact DER pin to the mounted local certificate; Bertie
+verifies CertificateVerify/Finished. It is a local identity pin, not general X.509 chain,
+hostname or expiry validation. Positive/wrong-pin tests were added. External interop retains
+certificate and hostname verification through real clients.
+
+
+## 2026-11-01T12:40:00-05:00 — M2 BLOCKER: Bertie ECDSA DER
+Multiple unmodified HTTP assertion suites fail at rustls client complete_io with
+InvalidCertificate(BadSignature). The aarch64-linux Nix check independently fails the
+same way in tls_case_and_count_boundaries (26 passed, 1 failed in its library target).
+The added bounded repeated-handshake regression calls the production adapter; it failed
+at case 150, and the unchanged rejection path's diagnostic confirms Signature::from_der
+rejected the encoding. No signature bytes, traffic keys, PEM keys or peer contents logged.
+
+At the pinned source src/tls13formats.rs:1130, ecdsa_signature takes fixed 32-byte r and s,
+prefixes zero when the top bit is set, but never strips redundant leading zero bytes.
+This explains strict DER rejection for some valid mathematical signatures. It is an
+upstream serialization defect, not an HTTP failure. The regression is randomized (OS
+entropy, fresh key/certificate/client hello), not a deterministic seed reproducer; the
+initial seed-sweep experiment did not fix all other entropy and is not described as one.
+No retry-until-valid signing, permissive verification, test skip or Bertie patch was added.
+
+The no-fail-fast pre-regression workspace run executed 56 tests: 55 passed, one TLS route
+suite failed; other earlier runs fail in different long peer loops. Final source adds
+one canonical-signature regression (57 tests total), which intentionally retains the
+expected-success assertion and exposes the pin's defect. M2 is committed as blocked.
+Nix git-source NAR hash was measured by a real fixed-output mismatch:
+sha256-f0PegjOzqEN0g6c08nLLLU/z4dl4UwZAWXF2qEKoMBU= . deny.toml allows only the one git
+repository; exact revision is locked. Proofs still pass 211/347/9 and standalone hello30.
+
+
+## 2026-11-01T12:47:00-05:00 — M3 blocked evidence and reproducibility
+Final native no-fail-fast workspace run executes 57 tests: 55 pass and 2 fail, both
+TLS CertificateVerify/DER failures (canonical-signature regression and existing
+case/count loop). All non-TLS targets pass. New regression's DER-decoder diagnostic
+confirms the cause; it records no signature contents. Final full mutant invocation
+verifies its baseline proofs, then refuses the failing TLS baseline: no final mutants
+counted. The separate M1 receipt preserves five valid hello kills (four intent kills;
+all five actual test failures). The original fifteen mutants and all protected core
+source bytes are unchanged. Harness now clears stale results before its baseline,
+so a failed run cannot leave a previous kill receipt looking current.
+
+Added read-only spike matrix adaptation and exact stage-16 eighteen-request comparison
+for future 8099 checks. These are syntax-checked, not live-tested. They retain certificate
+verification and never print response plaintext. Root/health assertions reflect the real
+HTTP core rather than the spike's demonstration page/newline. No container is deployed.
+No live comparison, interop row, capacity probe or browser result is claimed.
+
+Stage-17-style static musl audit build (debug information retained; its historical
+measurement-only doCheck=false override) is separate from release acceptance. It creates
+no Docker image and cannot satisfy the release gates. Preliminary audit counts 1,184
+Bertie lines versus stage 17's 5,095 rustls/webpki/pki-types lines, with zero production
+dep-info for those three old TLS crates; final-source rebuild is pending. The audit includes
+our local Bertie healthcheck client, unlike the spike's server-only role. Formal-coverage
+is not on PATH; no sibling tool checkout is searched or modified. No stage-19 coverage
+percentage is invented. The stage 13 historical baseline is labelled separately.
+
+
+## 2026-11-01T12:50:00-05:00 — Stage 19 final evidence
+Final native and retained Nix proof logs both report exactly 211/347/9 plus standalone
+hello30, zero errors. Final native workspace tests: 55 passed / 2 failed / 57 total.
+Final Nix flake check fails its glibc TLS library target: 27 passed / 1 failed (new DER
+regression, case 288). image-static fails its musl TLS library target: 25 passed / 3
+failed (DER regression and two other handshake-dependent tests). Proof/dependency/test
+gates remain configured; no server image was produced or loaded. The dependency log
+retrieval has no completed cargo-deny verdict to claim separately from the failed check.
+
+Final-source measurement-only musl build succeeds. Stage-17 DWARF script reports Bertie
+1,184 distinct in-binary source pairs, 671 functions by outermost source attribution;
+rustls/webpki/pki-types each have zero production dep-info (and no linked code). Stage 17
+comparison remains 4,152 + 693 + 250 = 5,095 lines. This audit includes the healthcheck
+client, is not a running-container artifact and is not formal coverage. The final binary
+SHA-256 is 2b4c0936be2be4d58ae8723b9c9b263a6827990f3e267cd0fc7a44ae8a576324.
+Source inventory: 28 trusted production functions / 487 physical SLoC vs stage 16's
+63 / 618; eleven are new TLS adapter functions, all listed with reasons/limits in
+TRUSTED-BASE. main healthcheck and serve_tcp remain trusted, too.
+
+Protected core byte comparison against 0b7dec4 exits zero; source/proof changes are the
+new hello module and its registration only. Catalog 9 entries / 95 spec functions passes;
+Python syntax and git diff whitespace checks pass. No assume/admit/external_body added.
+No physical browser, stage-19 live request, interop matrix, byte-equivalence or formal
+coverage run is claimed. Existing proven-io remains healthy on 8098; bertie-spike remains
+running on 8092. bertie-boundary is absent, so 8099 is not deployed. No existing container
+was modified, stopped, restarted or removed. No scratch Docker image exists to remove.
+All own build containers used --rm and have exited. No branch switch, push, identity
+override, external message, TLS-key read/copy/print/commit or out-of-scope write occurred.
+The existing untracked operator transcript remains untouched. Independent acceptance is
+outstanding and cannot pass at the required pin; an upstream fix/spec pin review is needed.
+Any preexisting image-static.tar.gz or result symlink is earlier-stage output, not a
+stage 19 release artifact; failed builds did not overwrite or load it.
+
+## 2026-11-03 bertie-der pilot M4 (Claude Code): ECDSA DER fix evidence
+Added an ignored test `binary_rustls_handshakes` (src/binary_handshake_tests.rs): a rustls client using the
+test provider does repeated real handshakes against a locally running `scratch-server` binary (env M4_PORT,
+M4_CERT, M4_N). It is the before/after detector for the Bertie non-minimal-DER bug (~1 in 256 signatures).
+Cargo.toml/Cargo.lock and the pin are NOT changed here: the fixed Bertie (cryspen/bertie fork branch
+`integration/stage19` = fbbcc13 + `fix/ecdsa-der`, local only) was substituted through a `[patch]` path in a
+work copy (see projects/bertie-der/scripts/m4-setup.sh, NOTES.md M4). Results, 5000 handshakes each:
+unfixed fbbcc13: rustls 19 failed, OpenSSL s_client 20 failed; fixed: 0 and 0. `cargo test --workspace`:
+unfixed 3 failures (bertie_signatures_are_canonical, malformed_tls_never_dispatches, io_tests::stage16 classification),
+fixed 1 failure (io_tests::stage16, needs Rust 1.99; the container has 1.98.0; same on both).
+`./verification/verify.sh` unchanged: 211 / 347 / 9 / 30 verified, 0 errors.
+
+## 2026-11-20 — Stage 19 rerun started on fixed Bertie
+Actual starting HEAD edf43c0 is dac4d41 plus the supplied rerun prompt. No branch switch.
+Local read-only integration/stage19-v2 resolves to 8ff624adda8b74c8c0edbec29b7c92492164233f
+(fbbcc13 plus b10a3f0 DER codec and 8ff624a CertificateVerify integration). Cargo.lock now
+uses the requested file URL and exact rev, with unchanged default api/std/defensive features.
+Production cargo tree for aarch64-unknown-linux-musl contains no rustls/webpki/pki-types.
+No regression assertion, production Rust, proof, HTTP test or mutant semantics changed.
+The mutant harness accepts SPEC_MUTANT_LOG_DIR solely to separate rerun receipts.
+A native driver invokes the existing ignored binary rustls detector with M4_N=10000 and
+M4_ASSERT_ZERO=1 and always terminates its own temporary server.
+
+Pure native Nix fetchGit with the explicit rev succeeds; NAR hash is
+sha256-6aU+7cDOYOVPZmfEjusOh8KE7k/wfn2Yu+ZY1IevQVY=.
+The first Linux runner attempt exposed a missing linked-worktree Git directory, not a
+purity failure. The runner now also mounts its resolved common Git directory read-only.
+No source vendored/copied into the repository; no upstream changes, branches or pushes.
+The existing TLS location is taken from read-only docker inspect of bertie-spike; the
+obsolete sibling-path assumption in the old comparison scripts does not match this machine.
+formal-coverage is unavailable on PATH; nothing installed. Shared memory search/write tools
+are unavailable in this session. Operator codex-run-stage19*.log files remain untouched.
+
+## 2026-11-21 UTC — Native gates pass; cargo-deny release blocker
+Fresh verify.sh exits zero: parser 211, transport 347, AEAD 9, hello 30; zero errors.
+Fresh cargo test --locked --workspace --no-fail-fast exits zero: 57 passed, zero failed,
+one ignored (the binary detector, invoked separately). The unchanged expected-success
+canonical-signature regression passes. Catalog: 9 entries, 95 spec functions, zero errors.
+No src/, crates/, tests/ or config/ differences from dac4d41.
+
+Pure Linux flake evaluation and Bertie source fetching succeed, after read-only mounting
+linked-worktree metadata. This is NOT a pending-push source/purity failure. The image gate
+instead rejects the old Bertie dependency tree: cargo-deny reports eleven vulnerability
+findings and two unmaintained dependencies from the already pinned advisory snapshot.
+IDs: RUSTSEC-2026-0387, -0124, -0023, -0026, -0075, -0330, -0331, -0073, -0074,
+-0207, -0208; RUSTSEC-2024-0436 (paste), RUSTSEC-2024-0370 (proc-macro-error).
+These are cargo-deny's dependency findings, not a claim that every issue is reachable in
+our server. No new ignores, advisory filtering or gate bypass is authorized or introduced.
+A separate wildcard finding is fixed by adding version = "=0.1.0-pre.2" alongside the exact
+git rev; locked metadata still resolves unchanged. Final Nix rerun is underway to verify
+that correction. Linux musl tests and the stage-17-style audit are being run separately;
+they cannot stand in for a gated release image. No long-lived container created.
+Publishing 8ff624a alone will not resolve these advisory failures. Bertie's manifest pins
+old libcrux minor series; changing Bertie or its required feature set is outside this task.
+
+## 2026-11-21 UTC — Final dependency verdict and audit-driver correction
+After the explicit Bertie version constraint, cargo-deny reports advisories FAILED,
+bans ok, licenses ok, sources ok. Final flake check and image-static are rejected by the
+unchanged advisory gate. Linux glibc root-package tests pass: 55 passed, zero failed, one ignored detector; retained proof log is 211/347/9/30, zero errors.
+
+The old measurement helper imported path:/src, which tried to traverse ignored target/
+while the mutant harness deleted its temporary copies; evaluation failed with
+"path '/src/target/spec-mutant-vhp190uq' does not exist". The helper now imports the tracked
+Git worktree as git+file:///src, like the normal flake CLI, excluding target/ and caches.
+Its historical measurement-only debug/strip/test override stays separate from release gates.
+The flake itself never uses --impure. The audit is rerunning; it cannot approve deployment.
+
+Optional cargo fmt --all -- --check reports pre-existing formatting differences in unchanged
+Verus/test/shell files (including dac4d41's detector). No formatting changes made to protected
+source; no git hooks are configured/present and none were bypassed. This optional check is
+not claimed passing. Required native proof/test commands above do pass.
+
+## 2026-11-21 UTC — R1 completed locally
+The existing dac4d41 detector completed exactly 10,000 native production-binary handshakes:
+failed=0, first_failed_case=None, reasons={}, 550.93 seconds. M4_ASSERT_ZERO=1 was set;
+the test selected exactly one detector and passed. Certificate/hostname checks and the
+strict DER decoder were enabled. The driver terminated its own native server afterward.
+The original randomized bertie_signatures_are_canonical expected-success assertion remains
+byte-for-byte unchanged and passes in the normal workspace suite too.
+
+Linux glibc and musl root-package tests each pass 55, zero failures, one ignored detector.
+The native --workspace run additionally includes transport-core's two hello tests, making
+57 passed. These are command scopes, not missing Linux failures. Retained Linux proofs:
+211/347/9/30, zero errors. Required production tree has no rustls/webpki/pki-types.
+R1 commit follows; final twenty-mutant evidence will be recorded when the harness completes.
+
+## 2026-11-21 UTC — R2 completed as blocked
+Final Nix check and image-static were rerun after the version constraint correction;
+both reject verified-boundary-dependencies at the advisory gate (exit 3). Pure fetching
+works with cargoLock.allowBuiltinFetchGit=true and the explicit rev in Cargo.lock;
+there is no impure expression in flake.nix, no vendoring and no new advisory exception.
+The runner exposes only the fixed repo and its resolved common Git metadata read-only.
+Sources, bans and licenses pass. Eleven vulnerability findings plus the two unmaintained
+findings listed above remain; the existing hax-only exception was not changed.
+
+Independent Linux server-static derivation succeeds with all 55 root-package tests passing;
+the glibc derivation also succeeds, and proof receipt remains 211/347/9/30 zero errors.
+No stage 19 image/archive was produced or loaded. Any preexisting image-static.tar.gz or
+image tag belongs to earlier work and is not a stage 19 acceptance artifact. Image-dependent
+acceptance is blocked by dependency remediation, not pending push. R2 commits the sound
+local-source build support while retaining all release gates.
+
+## 2026-11-21 UTC — R3 completed as blocked, with fresh source audit
+Stage-17-method musl audit succeeds at the new pin: 1,199 distinct Bertie (file,line) pairs
+and 671 functions by outermost source attribution. Previous blocked pin had 1,184 lines;
+stage 17 rustls/webpki/pki-types were 4,152 + 693 + 250 = 5,095. The old three TLS crates
+have zero production dep-info and zero linked lines. This source audit includes the local
+healthcheck client and is an upper bound on reachability, not dynamic or formal coverage.
+Audit binary SHA-256: 3738a720ed4f1bd08bb3e810ccc217650722899aa392a5a6d742874a2dc438d8.
+Evidence: logs/stage19b-surface.json and stage19b-surface.log; reproduce with
+NIX_LOG_PREFIX=stage19b verification/scripts/bertie-surface-build.sh, then
+NIX_LOG_PREFIX=stage19b python3 verification/scripts/bertie-surface.py.
+
+There is no accepted image, hence no bertie-boundary container, live eighteen-request
+comparison, live interop matrix/default rustls row, or audit of a shipped image. No
+proven-io-ref was needed or created. These remain BLOCKED by cargo-deny dependency findings,
+not pending push; do not deploy an ungated binary/image to run around the gate.
+The existing comparison/interop scripts now accept SCRATCH_TLS_DIR and STAGE19_LOG_PREFIX
+without changing TLS verification or request/probe semantics. Python syntax checks pass;
+the live scripts are not claimed executed. formal-coverage is neither on PATH nor available
+as an executable in this checkout; not installed or searched for outside allowed scope.
+Historical stage-13 v1.4 baseline remains 644/1,363 proven (47.25%), 300 tested / 419
+unverified; it is not a stage-19 measurement. No new trusted production functions in this
+rerun: the stage-19 inventory remains eleven new TLS functions, 28 shell functions / 487 SLoC.
+R3 commits audit reproducibility and the recorded blocked live scope. Twenty mutants continue.
+
+## 2026-11-21 UTC — Exact dependency findings retained for follow-up
+Final cargo-deny receipt: logs/stage19b-deny-log.log (pinned snapshot, no new exclusions).
+These are the package versions cargo-deny rejected; no reachability decision is implied.
+
+| Package | Locked version | Reported advisory IDs |
+|---|---|---|
+| crypto-bigint | 0.5.5 | RUSTSEC-2026-0387 |
+| libcrux-chacha20poly1305 | 0.0.2 | RUSTSEC-2026-0124 |
+| libcrux-ecdh | 0.0.2 | RUSTSEC-2026-0023 |
+| libcrux-ed25519 | 0.0.3 | RUSTSEC-2026-0026, RUSTSEC-2026-0075 |
+| libcrux-kem | 0.0.2 | RUSTSEC-2026-0330, RUSTSEC-2026-0331 |
+| libcrux-poly1305 | 0.0.2 | RUSTSEC-2026-0073 |
+| libcrux-sha3 | 0.0.2 | RUSTSEC-2026-0074, RUSTSEC-2026-0207, RUSTSEC-2026-0208 |
+| paste | 1.0.15 | RUSTSEC-2024-0436 (unmaintained) |
+| proc-macro-error | 1.0.4 | RUSTSEC-2024-0370 (unmaintained) |
+
+## 2026-11-21 UTC — Final native matrix and acceptance disposition
+Full harness exits zero: 20/20 caught (15 existing + 5 hello), zero survivors, zero invalid.
+Every refinement gate succeeds, every mutant fails actual tests, 17 also fail intent.
+Hello: 5/5 actual test kills, 4 intent kills. Receipt: logs/stage19b-mutants/results.json.
+No tests/mutants/proofs or production Rust were changed from dac4d41; only the harness's
+log-directory option changed. Final receipt validation additionally requires twenty distinct
+mutants, successful refinement and actual test-failure evidence for each.
+
+Final local results: 211/347/9 + hello30 zero-error proofs; 57 native workspace tests pass;
+10,000 strict rustls/native production-binary handshakes, zero failures; production tree
+rustls/webpki/pki-types-free; Linux glibc/musl root tests 55 each pass. Pure source fetch works.
+Nix check and image-static FAIL the unchanged advisory gate (eleven vulnerability, two
+unmaintained findings). R2/R3 are recorded as blocked, not accepted and not pending push.
+No container exists named bertie-boundary or proven-io-ref, no image was loaded, and no
+existing container/image was modified. Eighteen byte-identical requests, interop/default
+rustls matrix, physical browsers and image audit are not run. Fresh source audit succeeds:
+Bertie 1,199 lines / 671 functions vs stage 17 5,095 TLS lines; old TLS crates zero.
+formal-coverage unavailable; historical coverage and trusted inventory are labelled.
+Optional fmt check has pre-existing failures in untouched source and is not claimed passing.
+
+Final docs preserve November 1 blocked results as superseded history and add November 21
+results/browser checklist. Summary receipt: logs/stage19b-summary.json. R1 601228a,
+R2 774a59a, R3 d699d0e; final commit follows as configured Dudley. No push, branch switch,
+upstream write, email/message, key copy/print or operator-log modification occurred.
+Independent acceptance remains outstanding. A reviewed dependency remediation is needed;
+publishing the current pin alone is insufficient. Shared diary filing could not be done:
+cc-graph/cc-memory tools are unavailable in this session.
+
+## 2026-11-20 — Stage 19c dependency update started
+Andrew authorized a new Bertie dependency branch and only two unmaintained exceptions.
+Created ~/src/bertie-deps on deps/libcrux-advisories from 8ff624a using
+worktree add; existing worktrees/branches unchanged. Configured identities remain
+Andrew VanLoo (Bertie) and Dudley (scratch-server). No pushes. Operator logs untouched.
+Crates.io metadata and dependency evidence go to logs/stage19c-*. Current crates.io lists
+stable p256 0.14.0 / elliptic-curve 0.14.3: investigate rather than assume pre-release-only.
+The existing deny file already ignores cfg(hax)-only RUSTSEC-2026-0173; the requested
+final policy allows exactly two unmaintained ignores, so no third exception will be retained.
+Memory search/diary tools are unavailable (no matching tools exposed).
+
+## 2026-11-21 04:35 UTC — Compatibility and toolchain evidence
+libcrux-kem 0.0.10 (minimum patched) removed the kyber feature and
+Algorithm::X25519Kyber768Draft00 (changelog dates removal to 0.0.3). Existing
+Bertie exposes that variant. Asked Andrew whether removing that obsolete algorithm
+is authorized; no dependent change until answered. Independent manifest updates:
+libcrux-chacha20poly1305 0.0.2 -> 0.0.8, ed25519 0.0.3 -> 0.0.7.
+Crates.io confirms stable p256 0.14.0 -> elliptic-curve ^0.14.1 -> crypto-bigint
+^0.7.8, above the advisory minimum 0.7.6. An isolated compile probe of our exact
+PKCS#8 PEM decode/to_bytes API passes unchanged; no prerelease or rewrite needed.
+Current production crypto-bigint 0.5.5 path is scratch-server -> p256 0.13.2 ->
+elliptic-curve 0.13.8 (also via ecdsa 0.16.9 / primeorder 0.13.6). Bertie's
+manifest does not use RustCrypto p256; its libcrux-p256 is a different package.
+All-target all-feature inverse trees confirm paste is a proc-macro and
+proc-macro-error is used solely by hax-lib-macros 0.2.0 (proc-macro); default
+native trees contain neither. Final graph must be rechecked before ignores.
+The read-only bertie-der Docker script fails before executing: its historical
+toolchain bind source does not exist. The moved formal-coverage results path has
+no toolchain cache. Asked for its location; not reinstalling or substituting proofs.
+An isolated Docker runtime test uses existing rust:1.98.0-trixie and native-fetched
+registry sources while the exact hax/F* cache is located. Original projects unchanged.
+
+## 2026-11-21 04:36 UTC — RustCrypto remediation
+Updated scratch-server's p256 requirement 0.13 -> 0.14 and ran targeted cargo update
+-p p256. Stable p256 0.14.0 preserves the key-load call unchanged and selects
+elliptic-curve 0.14.3 / crypto-bigint 0.7.11. No crypto-bigint exception added.
+The old path decoded a private scalar and validated its optional public key at
+startup (elliptic-curve SecretKey::from_sec1_der/from_slice, ScalarPrimitive
+is_zero/ct_lt and public-key scalar arithmetic). This involves secret arithmetic;
+no claim of immunity to RUSTSEC-2026-0387 was made. The same old p256 was also
+used in cfg(test) Config::from_der. Bertie itself has no RustCrypto p256 edge at
+8ff624a; its libcrux-p256 package is distinct.
+Advisory source: https://rustsec.org/advisories/RUSTSEC-2026-0387 — subtraction,
+zero counting, division and Montgomery multiplication can have compiler/CPU-dependent
+secret branches; UintRef equality can short-circuit and BoxedMontyForm::invert
+branches on invertibility. Fixed >=0.7.6. This is a reachability review, not an
+exploitability measurement or full side-channel audit.
+
+## 2026-11-21 04:36 UTC — Conservative KEM boundary
+No authorization to remove the Kyber draft API has arrived. Preserve existing
+Bertie behaviour/features and proceed only with independent fixes; the KEM item
+remains explicitly blocked rather than silently removing an algorithm or carrying
+a vulnerable legacy alias behind a nominal version bump. A full KEM migration
+also changes rand 0.9 -> 0.10 traits, requiring coordinated API/proof review.
+The isolated Docker copy initially lacked test_certs, causing read_cert to fail;
+restored the unchanged public fixtures and reran the entire used-member suite.
+No test/source assertion was edited or skipped to hide that failure. Only the
+existing network client test is filtered in Docker --network none, as in bertie-der.
+
+## 2026-11-21 04:37 UTC — Full-graph AEAD compatibility
+First B1 partial commit fd49638 passes Bertie's isolated member suite (15 lib,
+2 handshakes, 1 doctest; zero failures; original 2 ignored / 1 network-filtered).
+Scratch-server pin integration found a real resolver conflict: chacha20poly1305
+0.0.8 -> secrets =0.0.5 -> hax-lib =0.3.6 cannot coexist with our existing
+core-models -> hax-lib ^0.3.7. chacha20poly1305 0.0.9 is the smallest compatible
+patched release: secrets =0.0.6 -> hax-lib ^0.3.7. Retesting before a follow-up
+B1 commit; no unrelated dependency downgrade or broader upgrade is used.
+Fresh Verus proofs pass 211/347/9 + hello30, zero errors. Stable p256-only native
+workspace run passes 57 tests; final pinned-Bertie run will be separate.
+Added a deny-check Nix entry point to run only the unchanged dependency gate before
+conditional B3, and switched local Bertie read-only mounts to bertie-deps. Snapshot,
+clock, gate logic and flake.nix unchanged. Exactly two requested unmaintained ignores
+replace the old cfg(hax) ignore; any newly exposed advisory is left failing.
+
+## 2026-11-21 04:39 UTC — Final independent-fix pin and native gates
+B1 follow-up 03374d4 raises both AEAD and Ed25519 to 0.0.9. Ed25519 0.0.7/0.0.8
+also resolve secrets =0.0.5 via sha2/traits, so 0.0.9 is the first compatible
+release for each in the full server graph. Bertie Docker suite again passes
+15 lib / 2 handshakes / 1 doctest, existing 2 ignored and 1 network-filtered.
+No source/API/default-feature changes; der.rs and all proof sources unchanged.
+Targeted cargo update -p bertie succeeds at 03374d49c29f5dad55252584fa362ade0ea3010e.
+Final inverse trees confirm the two unmaintained exceptions remain build-only;
+normal musl tree excludes all rustls crates and the no-proc-macro tree excludes
+paste/proc-macro-error. Full locked tests, twenty mutants, strict 10,000-handshake
+loop and Nix deny-check are running. Native loop reads the existing TLS mount
+identified read-only from bertie-spike's Docker configuration; no key copy/print.
+
+## 2026-11-21 04:40 UTC — Nix advisory verdict / B3 blocked
+NIX_LOG_PREFIX=stage19c ./nix-build.sh deny-check exits nonzero in the real Nix
+cargo-deny derivation, after successful pure local-source fetching/vendor setup.
+Snapshot, clock and all flake gate logic unchanged. Verdict: advisories FAILED;
+bans, licenses, sources ok. Remaining six vulnerability findings:
+- libcrux-ecdh 0.0.2: RUSTSEC-2026-0023.
+- libcrux-kem 0.0.2: RUSTSEC-2026-0330, RUSTSEC-2026-0331.
+- libcrux-sha3 0.0.2: RUSTSEC-2026-0074, RUSTSEC-2026-0207, RUSTSEC-2026-0208.
+Additionally, removing the pre-existing third ignore (per exactly-two-only policy)
+exposes proc-macro-error2 RUSTSEC-2026-0173, unmaintained, through hax-lib-macros.
+No exception added for it. Exactly the two approved 2024 ignores are present and
+accepted, each with a crate/reason/build-proc-macro parent. Crypto-bigint, AEAD,
+Poly1305 and Ed25519 findings are gone. Evidence: stage19c-deny-log.log,
+stage19c-deny-clean.log and stage19c-deny-errors.json.
+B3 is BLOCKED; no full flake check or image-static build will be attempted after
+the failed gate, and no ungated deployment/source audit is used as a substitute.
+No bertie-boundary or proven-io-ref container exists. Existing containers/images
+unchanged. Eighteen-request comparison, interop and shipped-image line audit are
+not run. formal-coverage remains unavailable on PATH; not installed.
+
+## 2026-11-21 04:43 UTC — Native deny environment and policy check
+Native cargo deny --offline --all-features check was also attempted; it exits 1
+because .advisory-db/advisory-db-3157b0e258782691 is absent. No fetch/snapshot/clock
+change was made. The completed Nix deny-check is the substantive advisory result;
+it uses the existing pinned archive/frozen clock and fails the seven findings
+listed above. Final policy assertions pass: exactly the two approved IDs, exactly
+file://~/src/bertie-deps in allow-git, and no flake.nix diff. Catalog
+passes: 9 entries / 95 spec functions / zero errors. Script syntax checks pass.
+Minimum-compatible version metadata additionally saved in
+logs/stage19c-minimum-compatible-dependencies.json (crates.io dependency API).
+
+## 2026-11-21 05:07 UTC — Final native receipt validation / B2
+Strict native loop passes: 10,000 attempted, 0 failed, first_failed_case=None,
+reasons={}, M4_ASSERT_ZERO=1, 424.43 seconds. Native server terminated by its script.
+Full harness exits 0: 20/20 killed, zero survivors/invalid. Receipt independently
+checked for twenty distinct mutants, refinement_exit=0 and actual failed-test
+names on each; 17 intent kills, including 4/5 hello. No test/proof/mutant source
+changed. Final locked workspace tests: 57 passed / zero failed, one ignored
+detector executed separately by the strict loop. Fresh proofs 211/347/9 + hello30,
+zero errors; catalog 9/95/0; no production rustls/webpki/pki-types. Summary JSON
+under logs/stage19c-summary.json. These are Codex-run checks, not independent acceptance.
+B1 remains partial (KEM preservation conflict and missing hax/F* cache); B2's
+native gates pass but real Nix cargo-deny still fails six vulnerabilities plus
+unmaintained proc-macro-error2. No image or live acceptance. No answer to the two
+scope/toolchain questions has arrived; no dependent permission is inferred.
+
+## 2026-11-21 05:08 UTC — B3 blocked record
+B2 committed as aacb09c using configured Dudley identity; no hook bypass/override.
+B3 records only the mandated stop at the failed Nix dependency gate. Final Docker
+inventories are empty for bertie-boundary/proven-io-ref and bertie-boundary images;
+no long-lived or reference container was created, and no image loaded or tagged.
+No full flake check, image-static, 18 byte-identical requests, 28-row interop matrix
+or shipped-image audit was run. Historical 19b source measurement remains 1,199
+Bertie lines / 671 functions versus stage 17 total 5,095; it is not a new image
+measurement. No formal-coverage executable, no new percentage. The 11 new trusted
+TLS functions / 28-function, 487-SLoC shell inventory stays unchanged. Native deny's
+new empty advisory DB lock directory was removed; no snapshot fetched or changed.
+
+
+## 2026-11-21 05:09 UTC — Final disposition and handoff
+Bertie B1 partial commits fd49638 + 03374d4; scratch-server B2 aacb09c and B3
+5757723, all with configured identities. Final local receipt assertions pass:
+exact pre.2/file URL/revision pin, crypto-bigint only 0.7.11, exactly the two
+approved ignore IDs, unchanged flake snapshot/clock/gates and protected Rust/proof/
+test/mutant sources. Branches unchanged; Bertie worktree clean. Native tests and
+handshake driver sessions both exit 0. Final catalog remains 9/95/0. No rerun
+beyond the required suite was needed after documentation-only changes.
+B1 NOT COMPLETE: KEM upgrade conflicts with preserved legacy Kyber-draft support;
+need Andrew's scope decision, plus the existing hax 0.4.2/F* cache location for
+fresh Bertie.Der/Tls13formats checks. B2 native verification passes; Nix cargo-deny
+still FAILS (six old-KEM-path vulnerabilities and unmaintained proc-macro-error2).
+Exactly two new approved unmaintained ignores; the old third ignore was removed,
+not silently retained. No crypto-bigint exception. B3/overall acceptance NOT MET.
+Need a dependency/proof remediation decision, not a source push. No push, history
+rewrite, external message, mail script, other-worktree edit, key exposure or
+existing-container/image change. Operator codex-run-stage19*.log files remain
+untracked and untouched. Shared diary cannot be filed: cc-graph tools unavailable.
+Independent acceptance remains Andrew/Dudley's; no physical-browser result claimed.
+
+## 2026-11-21 12:15 UTC — D1 start (our Bertie) (recorded)
+Andrew authorizes maintaining Bertie from ef65f76 plus our fixes, removing unused algorithms and rebuilding proofs. Working only on specified branches/worktrees. Initial complete Bertie workspace tests pass (15 library + 2 API + 5 group/signature handshakes + 1 simple-client API + 1 doctest); one external-network client filtered, original ignored tests retained. Added retained-group wire-size/shared-secret regression pending rerun. Baseline production tree has 112 unique package lines. Baseline stage17-method binary audit running. cc-memory/cc-graph tools are not available; no recalled-memory or diary operation possible.
+
+## 2026-11-21 12:15 UTC — D1b production healthcheck conflict (recorded)
+D1 d34ad5e passes 25 workspace tests. D1b a20fa69 passes 24 workspace tests (16 library, 3 API including PSK/config rejection, 3 stream handshakes, 1 simple client API, 1 doctest; 3 ignored, 1 network filtered). Production tree drops 112→109 and client feature is absent, but scratch-server production healthcheck at src/tls.rs:183 imports Bertie Client/get_server_info. New scratch tests fail to compile E0432 because client is correctly gated. This is an actual production use missed by the task premise. Asked Andrew to choose preserving authenticated client probe, separating executable or changing healthcheck contract. No enablement or healthcheck change without decision. D3/D4 dependent acceptance blocked meanwhile; D2 toolchain work continues.
+
+## 2026-11-21 12:15 UTC — D2 toolchain rebuild and native/release gate receipts (recorded)
+Downloaded hax CLI 0.4.2 (5ccf89dd2e996c9f88f2267eaa2a64739c4ca41a), exact-commit source, nightly-2025-11-08 Rust/rustc-dev and F* 2025.10.06, all under bertie-toolchain. SHA256 URL ledger in downloads.sha256; cached Cargo/OPAM source downloads additionally mapped by scripts/stage19d-provenance.py. Rust compiler 1.93.0-nightly (843f8ce2e 2025-11-07), F* 7b347386330d0e5a331a220535b6f15288903234, bundled Z3 4.13.3. Existing images fc-verify-hax:v17 (3ab95fc...) and fc-verify-fstar-amd64:v17 (5cf29fb...) used unmodified. Initial build failures were tool assembly: simultaneous Cargo builds unified rustc-private features; upstream sequential install works. OCaml 5.3.0 parallel bootstrap failed missing Stdlib__Condition; serial rebuild passes. OPAM engine dependencies installing. Frontend compiles Bertie successfully, extraction is blocked until hax-engine is built. No proof failure from D1 recorded yet.
+
+Moved new rand_core compatibility shim into existing non_hax boundary before first backend extraction, commit e1af495, with no behavior change; three forwarding RNG methods remain explicitly trusted crypto glue. Final Bertie workspace 25 passed, zero failed; 3 original ignored and 1 external network filtered. D1b wire-offer follow-up 2f2c2c2 covers real AES/RSA/Ed25519/X448 offers, all rejected.
+
+Candidate scratch pin e1af495: Nix cargo-deny PASS (all four categories), unchanged snapshot/clock; full Nix flake check FAILS E0432 at production healthcheck importing gated Client/get_server_info. Native final locked workspace compile fails the same way, no test success implied. Native Verus PASS 211/347/9 + hello30; twenty-mutant harness passes proof baseline and stops at failing test compilation, zero new kills claimed. No image/container/reference/live/after-binary audit; no feature enablement or healthcheck contract change pending Andrew's choice. Existing container inventory contains only pre-existing services. formal-coverage is absent on PATH; not installed.
+
+## 2026-11-21 12:24 UTC — D2 stopped at introduced crypto namespace error
+Toolchain build and both hax extractions pass: 21 files each; 7 changed files across 5 modules. Strict Der F* passes, all VCs discharged, 333 seconds. Crypto interface fails Error 134 at generated Bertie.Tls13crypto.fsti:9:30-37: missing Bertie.Tls13crypto.Non_hax. Codex's e1af495 introduced the implicit open of an excluded RNG shim module. Formats/API/handshake/both key-schedulers each fail that same dependency, 6 failures total; no independent failed lemma claimed. Stopped that item per prompt: no source repair, generated patch, new assume/admit/lax or model changes. No zero-error gate claim. Details and exact per-module times in BERTIE-DEPS-REPORT.md and logs/stage19d-proofs.json. New trusted Bertie glue: validate plus 3 RNG forwarding methods.
+
+676 cached dependency download URL/checksum records plus manual tool/archive URL ledger; OPAM package export retained. Toolchain cached wholly under authorized bertie-toolchain; images untouched; all tool build/check containers now exited. Native proof counts remain 211/347/9 + hello30; final candidate test compilation fails E0432. Final Nix deny passes all four categories; Nix check fails compilation. Healthcheck question unanswered: no contract change or client enablement inferred.
+
+## 2026-11-21 12:26 UTC — Native deny environment
+Native offline cargo-deny also attempted on e1af495: exits 1 before advisory evaluation because no local advisory DB exists (FETCH_HEAD metadata cannot be read). No fetch/clock/snapshot change; completed Nix deny remains the substantive PASS. Only its newly created zero-byte db.lock and empty .advisory-db directory removed. Final historical commit inventory includes b10a3f0 DER codec plus integration 8ff624a.
+
+## 2026-11-21 12:26 UTC — D3 candidate checkpoint
+D2 checkpoint ce83b0d uses configured Dudley. Candidate pin/lock moves from 03374d4 to e1af495 (includes D1 and D1b follow-ups); dependency graph changes only Bertie/KEM required graph and removed RSA/Ed25519 paths. Added exactly one authorized unmaintained build-proc-macro ignore, RUSTSEC-2026-0173. Snapshot/clock/flake and protected Rust/proofs/tests/mutants unchanged. Native final tests and Nix check fail E0432 as documented; this commit is a reviewable blocked candidate, not a working/accepted release. Native proofs pass; no final mutants/10,000 loop success claimed. Question to Andrew remains pending.
+
+## 2026-11-21 12:27 UTC — D4 blocked-release checkpoint
+D3 candidate checkpoint dcdad81 is explicitly unaccepted. The required Nix deny gate passes, but full flake check fails production compilation and D2 has an unresolved crypto namespace error. Stop before image-static: no ungated image built/loaded/tagged, no bertie-boundary on 8099, no proven-io-ref, no 18-request byte comparison, no certificate-verified live interop and no shipped-image audit. Filtered final container/image inventories are empty. Pre-existing bertie-spike/parser-http services untouched; tool containers --rm and exited. Receipt logs/stage19d-release.json. After in-binary measurement unavailable; fresh before 1,200 lines / 665 functions, package tree 112→109. No pending-push excuse: local source fetching works and no publishing authorized.
+
+## 2026-11-21 12:29 UTC — Final stage19d receipt
+D2 ce83b0d, D3 dcdad81, D4 74749b4 committed as configured Dudley; final documentation receipt follows. Bertie d34ad5e/a20fa69/2f2c2c2/e1af495 committed as configured Andrew VanLoo. Final receipt assertions pass: branches correct, Bertie clean, root src/crates/tests/verification/flake/nix-build unchanged from task start; no extra policy exceptions, snapshot or clock changes. Native proofs 211/347/9+30 and Bertie workspace 25/0 pass. Hax baseline/candidate 21 files each pass; strict Der 333s pass; 6 F* attempts fail same introduced Non_hax namespace and are stopped. Nix deny passes; native offline deny lacks DB. Candidate native tests/Nix check fail E0432 healthcheck client import; mutant harness test baseline fails and strict loop cannot run. No image/live/after-binary results. Source-before 1,200 lines/665 functions, production packages 112→109 including root. Actual summary logs/stage19d-summary.json; independent acceptance NOT MET.
+
+Left for Andrew: choose the authenticated healthcheck/client boundary and authorize continuing the stopped crypto-extraction repair; then rerun remaining native/proof/release gates and the after audit. No response to healthcheck question has been inferred. cc-graph/cc-memory tools unavailable; shared diary cannot be filed, facts remain in these local records. Operator codex-run-stage19*.log files untouched. No push, GitHub action, email, key exposure or pre-existing service mutation.
+
+## 2026-11-21 13:03 UTC — E repair started (reviewed)
+Andrew explicitly authorizes the E1 crypto-boundary repair and E2 unauthenticated
+ServerHello readiness contract. Bertie e6ea574 moves both libcrux RNG-consuming
+calls inside non_hax, so trait-instance opens no longer leak into the abstract
+interface. Fresh hax extraction succeeds; strict seven-module F* rerun started.
+TRUSTED.md records five RNG/wrapper functions and the abstract crypto boundary.
+No proven items or proof patches changed. Memory tools remain unavailable.
+
+## 2026-11-21 13:03 UTC — E2 local checks (reviewed)
+Replaced the authenticated Bertie-client HTTP healthcheck with Andrew's chosen
+unauthenticated ServerHello readiness probe. Fixed 208-byte hello advertises
+ChaCha20/SHA256, ECDSA P-256 and MLKEM/X25519/P-256; valid public X25519 and P-256
+basepoint shares allow X25519 selection without RNG/crypto in the probe. One
+absolute two-second budget covers connect/write/bounded exact reads. A short
+write fails. A 16,384-byte stack bound and handshake type/length checks prevent
+unbounded allocation/read. Shutdown closes both directions on all connected
+paths. It does not finish TLS, authenticate a certificate or exercise HTTP.
+Four focused tests pass: real server/no dispatch; closed port; non-TLS/alert/
+malformed/truncated records; slow partial-byte timeout without budget renewal.
+Production feature tree excludes Bertie client; normal target tree excludes
+rustls/webpki/pki-types, RSA and Ed25519. Package identities: 109 (root included).
+Trusted shell inventory now 29 functions / 469 SLoC, constant data excluded.
+
+## 2026-11-21 13:03 UTC — E3 initial native receipts (reviewed)
+Locked scratch workspace tests pass 60/0 (one ignored strict detector run
+separately). Nix deny passes advisories/bans/licenses/sources unchanged. Native
+offline deny lacks its DB and fails before advisory evaluation; no DB fetched.
+First strict-loop launch used the relocated default TLS path, which does not
+exist. No handshakes attempted there; retained setup-failure log. Docker's
+read-only existing TLS mount identifies the actual directory; rerun uses that
+explicit path without copying or printing key material.
+
+## 2026-11-21 13:03 UTC — E3 native proof and Nix gates (reviewed)
+Native verify.sh passes 211/347/9 + hello30, zero errors; catalog 9/95/0,
+links 205/0 broken. Nix flake check passes on aarch64-linux (x86_64 omitted by
+Nix, not claimed tested). Nix advisory receipt passes all four categories under
+the existing snapshot/clock, no policy change. Native tests 60 passed / zero
+failed, detector ignored here and running separately. Full twenty-mutant harness
+and image-static started; no image/live/acceptance claim until completion.
+
+## 2026-11-21 13:03 UTC — E3 image and strict loop (reviewed)
+Gated image-static passes and loads bertie-boundary:static, image ID
+sha256:a0db071cbc3f6d3297a2cd273f25bbdcf0e13ae5b9d4d9c2007b2b190cf29af1.
+Strict native detector completes 10,000/10,000, zero failures, 494.90 seconds;
+script terminates its native server. Separate executable health checks return
+0 for that server and 1 for a closed port without needing a certificate directory.
+Stage17-method same-target/profile debug companion audit: Bertie 736 lines /
+409 functions (before 1,200 / 665); rustls/webpki/pki-types dep-info zero.
+Production package identities 112→109 including root (111→108 dependencies).
+Actual binary extracted directly from gated image archive: SHA256
+4b65f2bfad349e33f283e867593442bed7fdac4fc8cc325335df3facd8508af9.
+Audit companion is not byte-identical: .text 616344 vs image 616792 bytes;
+97.8813% common instruction multiset after masking AArch64 PC-relative immediates.
+This is source/profile correspondence evidence, not semantic or byte equivalence;
+736 is the prescribed DWARF debug-companion upper bound, not dynamic coverage.
+All 147 original model files are byte-identical to D2; five of seven F* checks
+pass so far. Remaining proof checks, mutants and live acceptance still pending.
+
+## 2026-11-21 12:58 UTC — E3 first live run and preserved timeout contract
+The first live matrix passes 25 rows (including the two local client unsupported
+cases), then fails its spike-inherited empty-close assertion for HTTP trickle.
+Both containers are removed by the runner. The 18 HTTP comparisons already pass.
+The server's existing/proven contract is HTTP 400 at the absolute ten-second
+request deadline, not empty EOF: unchanged src/io_deadline_tests.rs and
+scripts/stage16-live.py assert 400 and 10<=elapsed<12. No server fix or weaker
+deadline is warranted. Added stage19e-interop.py as a narrow wrapper: all original
+matrix rows and certificate checks stay; this row now polls to observe actual
+response/closure, requires HTTP 400, authenticated close and 10–12 seconds, and
+runs against BOTH proven-io-ref and Bertie. Original spike and stage19 interop
+scripts remain unchanged. This strengthens the row to the established contract,
+rather than accepting any closure or changing core behavior. First receipts saved
+as logs/stage19e-first-*. A second live run is in progress; mutants continue.
+
+## 2026-11-21 13:17 UTC — E local acceptance and final documentation
+All twenty mutants caught, zero survivors/invalid; all refinement exits zero and
+all twenty have actual failed-test evidence, 17 intent kills. All seven strict
+F* checks discharge all VCs. Native proofs 211/347/9+30, 60 locked tests, 25 Bertie
+workspace tests and 10,000 strict handshakes / zero failures pass. Nix deny/check/
+image pass; healthy hardened 8099 remains, temporary reference removed, 18/18
+responses identical, interop 26 PASS + 2 local client unsupported. Original core,
+proofs, mutants and release/advisory policy are unchanged. Audit 736 lines / 409
+functions vs 1,200 / 665 is explicitly the stage17 debug-companion upper bound;
+448-byte .text difference from image is recorded, not hidden as equivalence.
+README rewritten as current canon with source/date labels, local-pin requirement,
+TLS fork credit and feature/platform/advisory limits. E4 implementation is only
+README; E3 records are staged separately and README-only final commit follows.
+No formal-coverage executable/new percentage, x86_64 server or physical-browser
+claim. Independent acceptance remains Andrew/Dudley's. Memory diary tools are
+unavailable. No push, external message, hook bypass or pre-existing service change.

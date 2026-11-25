@@ -2,9 +2,14 @@
 db-path = ".advisory-db"
 db-urls = ["https://github.com/RustSec/advisory-db"]
 maximum-db-staleness = "P14D"
-# Transitive hax-lib-macros 0.3.7 dependency under cfg(hax) only; not built
-# by this application or Verus. No patched release. Do not ignore vulnerabilities.
-ignore = ["RUSTSEC-2026-0173"]
+# Both crates occur only behind hax-lib-macros 0.2.0 (proc-macro).
+# Inverse all-target/all-feature trees and the normal no-proc-macro tree
+# are recorded in logs/stage19c-*; neither is linked into the server.
+ignore = [
+  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 2.0.1 is unmaintained, not a vulnerability; build-time dependency of hax-lib-macros 0.3.7 (proc-macro), absent from the production no-proc-macro tree" },
+  { id = "RUSTSEC-2024-0436", reason = "paste 1.0.15 is unmaintained, not a vulnerability; build-time proc-macro dependency of hax-lib-macros 0.2.0" },
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error 1.0.4 is unmaintained, not a vulnerability; build-time dependency of hax-lib-macros 0.2.0 (proc-macro)" },
+]
 
 [licenses]
 confidence-threshold = 0.95
@@ -20,3 +25,6 @@ wildcards = "deny"
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+# Stage 19: the exact revision is pinned in Cargo.toml and Cargo.lock.
+allow-git = ["https://github.com/gumshoe2020/bertie-tls"]

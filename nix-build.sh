@@ -4,11 +4,14 @@
 set -eu
 cd "$(dirname "$0")"
 target="${1:-image-static}"
-case "$target" in image-static|image|server|server-static|check|versions|proof-log|test-log|deny-log|log) ;; *) echo 'unknown Nix target' >&2; exit 2 ;; esac
+case "$target" in image-static|image|server|server-static|check|deny-check|versions|proof-log|test-log|deny-log|log) ;; *) echo 'unknown Nix target' >&2; exit 2 ;; esac
+# Expose linked-worktree metadata read-only without host-specific paths.
+repo_git_common=$(git rev-parse --path-format=absolute --git-common-dir)
 mkdir -p logs
 log="$PWD/logs/${NIX_LOG_PREFIX:-nix}-$target.log"
 if ! docker run --rm --name "release-nix-$$" -i \
-  -v "$PWD":/src -w /src \
+  -v "$PWD":/src -v "$PWD:$PWD" -w /src \
+  -v "$repo_git_common:$repo_git_common:ro" \
   -v scratch-server-nix-store:/nix \
   -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src \
   nixos/nix@sha256:f159a58f390677f41e8e900a74b6e2f9c7f27b364122ae6acf7a652ce6c551c0 sh -s -- "$target" "${2:-}" > "$log" 2>&1 <<'INNER'
@@ -17,6 +20,9 @@ case "$1" in
   log)
     case "$2" in /nix/store/*.drv) ;; *) echo 'expected Nix derivation path' >&2; exit 2 ;; esac
     nix --extra-experimental-features 'nix-command flakes' log "$2" ;;
+  deny-check)
+    system=$(nix --extra-experimental-features 'nix-command flakes' eval --raw --impure --expr builtins.currentSystem)
+    nix --extra-experimental-features 'nix-command flakes' build ".#checks.$system.dependencies" --no-update-lock-file ;;
   check) nix --extra-experimental-features 'nix-command flakes' flake check --no-update-lock-file ;;
   proof-log|test-log|deny-log)
     system=$(nix --extra-experimental-features 'nix-command flakes' eval --raw --impure --expr builtins.currentSystem)

@@ -31,6 +31,4 @@ if [ -z "${VERUS:-}" ]; then
   fi
 fi
 "$VERUS" --version | grep -F "$version" >/dev/null
-"$VERUS" --crate-type lib crates/http-subset/src/lib.rs
-"$VERUS" --crate-type lib crates/transport-core/src/lib.rs
-"$VERUS" --crate-type lib crates/transport-core/src/aead.rs
+python3 verification/scripts/verus-receipts.py "$VERUS"

@@ -42,3 +42,5 @@ __pycache__/
 /codex-run-stage18.log
 
 /logs-codex-run-stage18-aborted2.log
+
+/.advisory-db

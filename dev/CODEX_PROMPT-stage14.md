@@ -1,5 +1,5 @@
 You are building stage 14 of scratch-server, `proven-dispatch`, in this directory:
-<workspace> (git branch `proven-dispatch`).
+<workspace>/projects/scratch-server (git branch `proven-dispatch`).
 
 `PROVEN-DISPATCH.md` is the authoritative spec. Read it fully first, then PROVEN-TRANSPORT.md
 (the stage 8 pattern you are repeating), HEADER-POLICY.md, PROOFS.md, MUTANTS.md, PROGRESS.md and

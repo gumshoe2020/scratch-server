@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Mutate spec and executable together in isolated copies; never count a broken refinement proof.
 
-Logs and JSON receipts stay under logs/stage13-mutants; copies/build artifacts stay
-under target. --only permits development reruns; the default always runs all fifteen.
+Logs and JSON receipts stay under logs/stage19-mutants; copies/build artifacts stay
+under target. --only permits development reruns; the default always attempts all twenty.
 """
 import argparse
 import hashlib
@@ -19,14 +19,16 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = Path("crates/http-subset/src/lib.rs")
 SPEC = Path("crates/http-subset/src/spec.rs")
 BOUNDARY = "\n// STAGE18 MUTATION FILE BOUNDARY\n"
+HELLO_MUTANTS = ["hello-no-share", "hello-no-suite", "hello-no-signature", "hello-no-hybrid", "hello-unoffered-group"]
 MUTANTS = [
     "transfer-encoding", "expect-guarded", "headers25", "value257", "empty-values",
     "bare-lf", "lowercase-get", "http12", "duplicate-host-only", "unknown-reject",
     "percent-path", "strict-ignores-guarded", "space-token", "trailing-bytes", "cookie-drop",
 ]
 
+MUTANTS += HELLO_MUTANTS
 
-INTENT_TARGETS = dict(zip(MUTANTS, [
+INTENT_TARGETS = dict(zip(MUTANTS[:15], [
     "hard_name_intent", "hard_name_intent", "reject_headers25", "reject_value257",
     "reject_empty_value", "header_framing_intent", "reject_lower_get", "reject_http12",
     "reject_duplicate_connection", "witness_brave_dnt", "reject_percent",
@@ -126,6 +128,32 @@ pub(super) fn ending(s: &[u8], at: usize) -> (n: usize)
     return text
 
 
+def mutate_hello(directory, name):
+    source = directory / "crates/transport-core/src/hello.rs"
+    spec = directory / "crates/transport-core/src/spec/hello.rs"
+    a, b = source.read_text(), spec.read_text()
+    if name == "hello-no-share":
+        a = replace(a, "&& has_share(s, ext,", "&& (true || has_share(s, ext,", 3)
+        for g in ["0x11ec", "29", "23"]:
+            a = replace(a, f"has_share(s, ext, {g});", f"has_share(s, ext, {g}));", 1)
+        b = replace(b, "&& share_spec(s, ext, g)", "&& (true || share_spec(s, ext, g))", 1)
+    elif name == "hello-no-suite":
+        a = replace(a, "!contains(&suites, 0x1303)", "false", 1)
+        b = replace(b, "member_spec(words_spec(s, p as int, end as int)->Some_0, 0x1303)", "true", 1)
+    elif name == "hello-no-signature":
+        a = replace(a, "!contains(&sigs, 0x0403)", "false", 1)
+        b = replace(b, "member_spec(list_spec(s, ext as int, 13)->Some_0, 0x0403)", "true", 1)
+    elif name == "hello-no-hybrid":
+        a = replace(a, "let hybrid = contains", "let hybrid = false && contains", 1)
+        b = replace(b, "member_spec(groups, g) &&", "g != 0x11ec && member_spec(groups, g) &&", 1)
+    elif name == "hello-unoffered-group":
+        for g in ["0x11ec", "29", "23"]:
+            a = replace(a, f"contains(&groups, {g}) &&", "true &&", 1)
+        b = replace(b, "member_spec(groups, g) &&", "true &&", 1)
+    source.write_text(a)
+    spec.write_text(b)
+
+
 def safe_log_line(line):
     # Keep outcomes and source locations, never request literals, assertion values,
     # proptest counterexample bytes, or panic payloads containing header values.
@@ -149,8 +177,9 @@ def main():
     parser.add_argument("--refinement-only", action="store_true", help="development: check mutant consistency only")
     args = parser.parse_args()
     selected = args.only or MUTANTS
-    logs = ROOT / "logs/stage13-mutants"
+    logs = ROOT / os.environ.get("SPEC_MUTANT_LOG_DIR", "logs/stage19-mutants")
     logs.mkdir(parents=True, exist_ok=True)
+    (logs / "results.json").write_text("[]\n")  # Never retain stale kills after a failed baseline.
     (ROOT / "target").mkdir(exist_ok=True)
     baseline_env = dict(os.environ, CARGO_HOME=str(ROOT / ".tools/cargo"),
                         RUSTUP_HOME=str(ROOT / ".tools/rustup"), TMPDIR=str(ROOT / "target"))
@@ -177,14 +206,21 @@ def main():
             env = dict(os.environ, CARGO_HOME=str(ROOT / ".tools/cargo"), RUSTUP_HOME=str(ROOT / ".tools/rustup"),
                        CARGO_TARGET_DIR=str(ROOT / "target/spec-mutants-build"), TMPDIR=str(directory / "target/tmp"))
             Path(env["TMPDIR"]).mkdir(parents=True)
-            source = directory / SOURCE
-            spec = directory / SPEC
-            mutated = mutate(source.read_text() + BOUNDARY + spec.read_text(), name)
-            mutated_source, mutated_spec = mutated.split(BOUNDARY)
-            spec.write_text(mutated_spec)
-            # Stage 1 checks every preexisting proof, excluding the new intent module.
-            source.write_text(mutated_source.replace("mod intent;", "// Intent checked in phase two."))
-            result["refinement_exit"] = run(["./verification/verify.sh"], directory, logs / f"{name}-refinement.log", env)
+            is_hello = name in HELLO_MUTANTS
+            if is_hello:
+                mutate_hello(directory, name)
+                source = directory / "crates/transport-core/src/hello.rs"
+                mutated_source = source.read_text()
+                source.write_text(mutated_source.replace("mod intent;", "// Intent checked in phase two."))
+            else:
+                source = directory / SOURCE
+                spec = directory / SPEC
+                mutated = mutate(source.read_text() + BOUNDARY + spec.read_text(), name)
+                mutated_source, mutated_spec = mutated.split(BOUNDARY)
+                spec.write_text(mutated_spec)
+                source.write_text(mutated_source.replace("mod intent;", "// Intent checked in phase two."))
+            refinement_command = [verifier(directory), "--crate-type", "lib", "crates/transport-core/src/hello.rs"] if is_hello else ["./verification/verify.sh"]
+            result["refinement_exit"] = run(refinement_command, directory, logs / f"{name}-refinement.log", env)
             source.write_text(mutated_source)
             # Never count a malformed mutant as a kill.
             if result["refinement_exit"]:
@@ -192,9 +228,11 @@ def main():
             elif args.refinement_only:
                 result.update(status="well-formed", killed_by=[])
             else:
-                result["intent_target"] = INTENT_TARGETS[name]
-                result["intent_exit"] = run([verifier(directory), "--crate-type", "lib", str(SOURCE), "--verify-only-module", intent_module(INTENT_TARGETS[name]), "--verify-function", INTENT_TARGETS[name]], directory, logs / f"{name}-intent.log", env)
-                result["tests_exit"] = run(["cargo", "test", "--workspace", "--no-fail-fast"], directory, logs / f"{name}-tests.log", env)
+                result["intent_target"] = "hello intent module" if is_hello else INTENT_TARGETS[name]
+                intent_command = ([verifier(directory), "--crate-type", "lib", "crates/transport-core/src/hello.rs", "--verify-only-module", "intent"] if is_hello else [verifier(directory), "--crate-type", "lib", str(SOURCE), "--verify-only-module", intent_module(INTENT_TARGETS[name]), "--verify-function", INTENT_TARGETS[name]])
+                result["intent_exit"] = run(intent_command, directory, logs / f"{name}-intent.log", env)
+                test_command = ["cargo", "test", "-p", "transport-core", "--no-fail-fast"] if is_hello else ["cargo", "test", "--workspace", "--no-fail-fast"]
+                result["tests_exit"] = run(test_command, directory, logs / f"{name}-tests.log", env)
                 killed_by = []
                 if result["intent_exit"]:
                     content = (logs / f"{name}-intent.log").read_text(errors="replace")

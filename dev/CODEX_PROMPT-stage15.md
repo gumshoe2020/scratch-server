@@ -1,5 +1,5 @@
 You are building stage 15 of scratch-server, `proven-record`, in this directory:
-<workspace> (git branch `proven-record`).
+<workspace>/projects/scratch-server (git branch `proven-record`).
 
 `PROVEN-RECORD.md` is the authoritative spec. Read it fully first, then PROVEN-DISPATCH.md and
 PROVEN-TRANSPORT.md (the pattern you are repeating), TLS-PROVIDER.md, PROOFS.md, MUTANTS.md,

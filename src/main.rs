@@ -1,16 +1,15 @@
 //! Shell-free server, one bounded request per connection.
-use rustls::pki_types::pem::PemObject;
 use scratch_server::ServerState;
 use std::{
     env,
-    io::{Read, Write},
-    net::{TcpListener, TcpStream},
+    io::Read,
+    net::TcpListener,
     process::ExitCode,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 fn port() -> std::io::Result<u16> {
@@ -113,42 +112,12 @@ fn run() -> std::io::Result<()> {
     Ok(())
 }
 
-/// Authenticate the local TLS endpoint using its mounted certificate.
+/// Check loopback TLS readiness without a TLS client implementation.
 fn healthcheck() -> ExitCode {
-    let check = || -> std::io::Result<bool> {
-        let stream = TcpStream::connect_timeout(
-            &(([127, 0, 0, 1], port()?).into()),
-            Duration::from_secs(2),
-        )?;
-        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-        stream.set_write_timeout(Some(Duration::from_secs(2)))?;
-        let directory = env::var("SCRATCH_TLS_DIR").unwrap_or_else(|_| "/tls".into());
-        let mut roots = rustls::RootCertStore::empty();
-        for cert in rustls::pki_types::CertificateDer::pem_file_iter(
-            std::path::Path::new(&directory).join("cert.pem"),
-        )
-        .map_err(std::io::Error::other)?
-        {
-            roots
-                .add(cert.map_err(std::io::Error::other)?)
-                .map_err(std::io::Error::other)?;
-        }
-        let mut config =
-            rustls::ClientConfig::builder_with_provider(Arc::new(scratch_server::tls::provider()))
-                .with_protocol_versions(&[&rustls::version::TLS13])
-                .map_err(std::io::Error::other)?
-                .with_root_certificates(roots)
-                .with_no_client_auth();
-        config.alpn_protocols = vec![b"http/1.1".to_vec()];
-        let conn = rustls::ClientConnection::new(Arc::new(config), "localhost".try_into().unwrap())
-            .map_err(std::io::Error::other)?;
-        let mut stream = rustls::StreamOwned::new(conn, stream);
-        stream.write_all(b"GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n")?;
-        let mut reply = String::new();
-        stream.read_to_string(&mut reply)?;
-        Ok(reply.starts_with("HTTP/1.1 200 OK\r\n") && reply.ends_with("\r\n\r\nok"))
-    };
-    if check().unwrap_or(false) {
+    if port()
+        .and_then(scratch_server::tls::healthcheck)
+        .unwrap_or(false)
+    {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

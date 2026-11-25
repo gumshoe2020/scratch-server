@@ -1,0 +1,10 @@
+# Main conservatively reaches startup, TLS adapters, parser and readiness paths.
+entry_points = ["scratch_server::main"]
+
+[[security.include]]
+pattern = "http_subset::parse"
+reason = "Parses attacker-controlled HTTP request bytes"
+
+[[security.include]]
+pattern = "scratch_server::serve_connection"
+reason = "Handles unauthenticated connections and dispatches HTTP requests"

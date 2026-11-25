@@ -1,5 +1,5 @@
 You are building stage 17 of scratch-server, `rustls-surface`, in this directory:
-<workspace> (git branch `rustls-surface`).
+<workspace>/projects/scratch-server (git branch `rustls-surface`).
 
 `RUSTLS-SURFACE.md` is the authoritative spec. Read it fully first, then TLS-PROVIDER.md,
 PROVEN-IO.md, TRUSTED-BASE.md, ATTACK-SURFACE.md, and the tail of PROGRESS.md and NOTES.md. Reuse
@@ -15,7 +15,7 @@ Non-negotiables:
    builds for measurement are allowed if needed; remove any images you create.
 4. Do not run or modify the formal-coverage repository. Write nowhere outside this directory,
    except $TMPDIR, ~/.cargo, ~/.rustup (a nightly toolchain and cargo-fuzz are allowed) and Docker.
-   Do not touch <workspace>-tls.
+   Do not touch <workspace>/projects/scratch-server-tls.
 5. Never commit, print or log private keys, traffic secrets or plaintext record contents.
 6. No runtime behaviour change. If fuzzing finds a crash or a real bug in our code or in rustls,
    stop that target, commit the minimised evidence and explain it in NOTES.md; don't fix it. Never

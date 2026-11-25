@@ -62,3 +62,11 @@ prose = "specs/development/TLS-PROVIDER.md"
 files = []
 checks = ["provider and TLS integration tests"]
 reason = "Provider prose describes upstream primitive assurance and trusted glue with no local spec-level checks."
+
+[[spec]]
+id = "transport-core.hello"
+status = "development"
+prose = "specs/development/BERTIE-BOUNDARY.md"
+files = ["crates/transport-core/src/spec/hello.rs", "crates/transport-core/src/hello_intent.rs"]
+checks = ["Verus totality/selection", "concrete intent witnesses", "five hello spec mutants", "captured ClientHello tests"]
+reason = "New bounded TLS inspection; local proofs do not prove Bertie's protocol implementation."

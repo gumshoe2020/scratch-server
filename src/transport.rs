@@ -1,6 +1,5 @@
 //! Trusted socket deadlines shared by plaintext and TLS request paths.
 use crate::{serve_with_started, ServerState};
-use transport_core::io as core_io;
 use std::{
     cell::Cell,
     io::{self, Read, Write},
@@ -9,6 +8,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use transport_core::io as core_io;
 
 pub const IDLE_TIMEOUT: Duration = Duration::from_nanos(core_io::IDLE_NS);
 pub const READ_TIMEOUT: Duration = Duration::from_nanos(core_io::READ_NS);
@@ -43,7 +43,7 @@ impl Write for DeadlineSocket {
 /// HTTP bytes switch to the short timeout; TLS records cannot extend idle life.
 pub fn serve_tcp(
     socket: TcpStream,
-    tls: Option<Arc<rustls::ServerConfig>>,
+    tls: Option<Arc<crate::tls::Config>>,
     state: &ServerState,
     accepted: Instant,
 ) -> io::Result<()> {
@@ -60,14 +60,21 @@ pub fn serve_tcp(
         }
     };
     if let Some(config) = tls {
-        let conn = rustls::ServerConnection::new(config).map_err(io::Error::other)?;
-        let mut stream = rustls::StreamOwned::new(conn, socket);
-        serve_with_started(&mut stream, state, mark_started)?;
-        if stream.conn.is_handshaking() {
-            return Ok(());
+        let mut stream = match crate::tls::BertieStream::accept(socket, &config) {
+            Ok(stream) => stream,
+            Err(_) => return Ok(()),
+        };
+        match serve_with_started(&mut stream, state, mark_started) {
+            Ok(()) => {
+                let socket = stream.close_notify()?;
+                match socket.socket.shutdown(std::net::Shutdown::Both) {
+                    Err(e) if e.kind() == io::ErrorKind::NotConnected => Ok(()),
+                    result => result,
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => Ok(()),
+            Err(e) => Err(e),
         }
-        stream.conn.send_close_notify();
-        stream.flush()
     } else {
         serve_with_started(&mut { socket }, state, mark_started)
     }
@@ -75,6 +82,10 @@ pub fn serve_tcp(
 
 // Instant and Duration stay in the trusted shell; the core sees integer ns.
 fn elapsed_ns(accepted: Instant) -> u64 {
-    u64::try_from(Instant::now().saturating_duration_since(accepted).as_nanos())
-        .unwrap_or(u64::MAX)
+    u64::try_from(
+        Instant::now()
+            .saturating_duration_since(accepted)
+            .as_nanos(),
+    )
+    .unwrap_or(u64::MAX)
 }

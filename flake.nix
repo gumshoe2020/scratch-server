@@ -13,13 +13,17 @@
       };
       proofSource = pkgs: pkgs.lib.fileset.toSource {
         root = ./.;
-        fileset = pkgs.lib.fileset.unions [ ./crates ./verification/verify.sh ];
+        fileset = pkgs.lib.fileset.unions [ ./crates ./verification/verify.sh ./verification/scripts/verus-receipts.py ];
       };
       build = pkgs: rustPlatform: rustPlatform.buildRustPackage {
         pname = "scratch-server";
         version = "0.1.0";
         src = source pkgs;
-        cargoLock.lockFile = ./Cargo.lock;
+        cargoLock = {
+          lockFile = ./Cargo.lock;
+          # Fetch the public Git dependency at its locked revision.
+          allowBuiltinFetchGit = true;
+        };
         # Network integration test uses loopback only; all tests run in the sandbox.
         doCheck = true;
       };
@@ -27,7 +31,7 @@
       packages = forAll (pkgs:
         let
           mkImage = tag: server: pkgs.dockerTools.buildLayeredImage {
-            name = "proven-io";
+            name = "bertie-boundary";
             # Build-time gates: checks are dependencies, never image contents.
             extraCommands = ''
               test -e ${self.checks.${pkgs.stdenv.hostPlatform.system}.proofs}
@@ -66,7 +70,7 @@
           };
         in {
           tests = server;
-          proofs = pkgs.runCommand "verified-boundary-proofs" { nativeBuildInputs = [ verus ]; } ''
+          proofs = pkgs.runCommand "verified-boundary-proofs" { nativeBuildInputs = [ verus pkgs.python3 ]; } ''
             cp -R ${proofSource pkgs} source
             chmod -R u+w source
             cd source

@@ -1,1036 +1,261 @@
-//! TLS/provider shell. Nonce, length arithmetic and plaintext release use proven helpers.
-use libcrux_secrets::{ClassifyRef, ClassifyRefMut};
-use libcrux_sha2::Digest;
-use pki_types::pem::PemObject;
-use rustls::{
-    crypto::{self, cipher::*, hash, tls13::*, CryptoProvider},
-    pki_types::{self, alg_id, AlgorithmIdentifier, PrivateKeyDer, SignatureVerificationAlgorithm},
-    sign::{Signer, SigningKey},
-    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, ProtocolVersion,
-    SignatureAlgorithm, SignatureScheme, SupportedCipherSuite, Tls13CipherSuite,
-};
+//! Bertie record adapter. Clocks and HTTP decisions remain in their existing cores.
+use bertie_tls::{server::ServerDB, tls13crypto::*, tls13utils::AppData, Server, TLSkeyscheduler};
+use p256::pkcs8::DecodePrivateKey;
 use std::{
-    fmt,
-    io::{self},
+    collections::HashMap,
+    io::{self, Read, Write},
     path::Path,
     sync::Arc,
 };
-use transport_core::{aead, record};
+use transport_core::hello;
 use zeroize::Zeroizing;
 
-pub fn provider() -> CryptoProvider {
-    CryptoProvider {
-        cipher_suites: vec![SupportedCipherSuite::Tls13(&SUITE)],
-        kx_groups: vec![&X25519],
-        signature_verification_algorithms: crypto::WebPkiSupportedAlgorithms {
-            all: &[&P256Verify],
-            mapping: &[(SignatureScheme::ECDSA_NISTP256_SHA256, &[&P256Verify])],
-        },
-        secure_random: &OsRandom,
-        key_provider: &P256KeyProvider,
-    }
+pub struct Config {
+    certificate: Vec<u8>,
+    key: Zeroizing<Vec<u8>>,
 }
 
-static SUITE: Tls13CipherSuite = Tls13CipherSuite {
-    common: crypto::CipherSuiteCommon {
-        suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-        hash_provider: &Sha256,
-        confidentiality_limit: u64::MAX,
-    },
-    hkdf_provider: &Hkdf,
-    aead_alg: &ChaCha,
-    quic: None,
-};
-
-#[derive(Debug)]
-struct OsRandom;
-impl crypto::SecureRandom for OsRandom {
-    fn fill(&self, buf: &mut [u8]) -> Result<(), crypto::GetRandomFailed> {
-        getrandom::fill(buf).map_err(|_| crypto::GetRandomFailed)
-    }
-}
-impl rand_core::TryRng for OsRandom {
-    type Error = getrandom::Error;
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        let mut b = [0; 4];
-        getrandom::fill(&mut b)?;
-        Ok(u32::from_ne_bytes(b))
-    }
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        let mut b = [0; 8];
-        getrandom::fill(&mut b)?;
-        Ok(u64::from_ne_bytes(b))
-    }
-    fn try_fill_bytes(&mut self, b: &mut [u8]) -> Result<(), Self::Error> {
-        getrandom::fill(b)
-    }
-}
-impl rand_core::TryCryptoRng for OsRandom {}
-
-struct Sha256;
-#[derive(Clone)]
-struct HashContext(libcrux_sha2::Sha256);
-impl hash::Hash for Sha256 {
-    fn start(&self) -> Box<dyn hash::Context> {
-        Box::new(HashContext(libcrux_sha2::Sha256::new()))
-    }
-    fn hash(&self, data: &[u8]) -> hash::Output {
-        hash::Output::new(&libcrux_sha2::sha256(data))
-    }
-    fn output_len(&self) -> usize {
-        transport_core::io::HASH_LEN
-    }
-    fn algorithm(&self) -> hash::HashAlgorithm {
-        hash::HashAlgorithm::SHA256
-    }
-}
-impl hash::Context for HashContext {
-    fn fork_finish(&self) -> hash::Output {
-        let mut out = [0; 32];
-        self.0.finish(&mut out);
-        hash::Output::new(&out)
-    }
-    fn fork(&self) -> Box<dyn hash::Context> {
-        Box::new(self.clone())
-    }
-    fn finish(self: Box<Self>) -> hash::Output {
-        self.fork_finish()
-    }
-    fn update(&mut self, data: &[u8]) {
-        self.0.update(data);
-    }
+pub fn load_config(directory: &Path) -> io::Result<Arc<Config>> {
+    let certificate = load_certificate(directory)?;
+    let pem = Zeroizing::new(std::fs::read_to_string(directory.join("key.pem"))?);
+    let key = p256::SecretKey::from_pkcs8_pem(&pem).map_err(|_| invalid())?;
+    Ok(Arc::new(Config {
+        certificate,
+        key: Zeroizing::new(key.to_bytes().to_vec()),
+    }))
 }
 
-struct Hkdf;
-struct Expander(Zeroizing<Vec<u8>>);
-impl crypto::tls13::Hkdf for Hkdf {
-    fn extract_from_zero_ikm(&self, salt: Option<&[u8]>) -> Box<dyn HkdfExpander> {
-        self.extract_from_secret(salt, &[0; 32])
+pub fn load_certificate(directory: &Path) -> io::Result<Vec<u8>> {
+    let pem = std::fs::read(directory.join("cert.pem"))?;
+    let (label, der) = pem_rfc7468::decode_vec(&pem).map_err(|_| invalid())?;
+    if label != "CERTIFICATE" {
+        return Err(invalid());
     }
-    fn extract_from_secret(&self, salt: Option<&[u8]>, secret: &[u8]) -> Box<dyn HkdfExpander> {
-        let mut prk = Zeroizing::new(vec![0; 32]);
-        // TLS bounds both inputs far below the libcrux u32 input limit.
-        libcrux_hkdf::extract(
-            libcrux_hkdf::Algorithm::Sha256,
-            prk.classify_ref_mut(),
-            salt.unwrap_or(&[0; 32]).classify_ref(),
-            secret.classify_ref(),
-        )
-        .expect("TLS HKDF extract inputs fit u32");
-        Box::new(Expander(prk))
-    }
-    fn expander_for_okm(&self, okm: &OkmBlock) -> Box<dyn HkdfExpander> {
-        Box::new(Expander(Zeroizing::new(okm.as_ref().to_vec())))
-    }
-    fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> crypto::hmac::Tag {
-        let mut tag = Zeroizing::new([0; 32]);
-        libcrux_hmac::hmac_sha2_256(&mut tag, key.as_ref(), message);
-        crypto::hmac::Tag::new(tag.as_ref())
-    }
-}
-impl HkdfExpander for Expander {
-    fn expand_slice(&self, info: &[&[u8]], output: &mut [u8]) -> Result<(), OutputLengthError> {
-        libcrux_hkdf::expand(
-            libcrux_hkdf::Algorithm::Sha256,
-            output.classify_ref_mut(),
-            self.0.classify_ref(),
-            &info.concat(),
-        )
-        .map_err(|_| OutputLengthError)
-    }
-    fn expand_block(&self, info: &[&[u8]]) -> OkmBlock {
-        let mut out = Zeroizing::new([0; 32]);
-        self.expand_slice(info, out.as_mut())
-            .expect("HKDF hash-sized output");
-        OkmBlock::new(out.as_ref())
-    }
-    fn hash_len(&self) -> usize {
-        transport_core::io::HASH_LEN
-    }
+    Ok(der)
 }
 
-#[derive(Debug)]
-struct X25519;
-struct Exchange {
-    secret: Zeroizing<[u8; 32]>,
-    public: [u8; 32],
-}
-impl crypto::SupportedKxGroup for X25519 {
-    fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, Error> {
-        let mut secret = Zeroizing::new([0; 32]);
-        getrandom::fill(secret.as_mut()).map_err(|_| crypto::GetRandomFailed)?;
-        libcrux_curve25519::clamp(&mut secret);
-        let mut public = [0; 32];
-        libcrux_curve25519::secret_to_public(&mut public, &secret);
-        Ok(Box::new(Exchange { secret, public }))
-    }
-    fn name(&self) -> NamedGroup {
-        NamedGroup::X25519
-    }
-}
-impl crypto::ActiveKeyExchange for Exchange {
-    fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, Error> {
-        let invalid = || Error::PeerMisbehaved(rustls::PeerMisbehaved::InvalidKeyShare);
-        let peer = record::x25519_peer(peer).ok_or_else(invalid)?;
-        let mut shared = Zeroizing::new([0; 32]);
-        libcrux_curve25519::ecdh(&mut shared, &peer, &self.secret).map_err(|_| invalid())?;
-        Ok(crypto::SharedSecret::from(shared.as_slice()))
-    }
-    fn pub_key(&self) -> &[u8] {
-        &self.public
-    }
-    fn group(&self) -> NamedGroup {
-        NamedGroup::X25519
-    }
+fn invalid() -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, "TLS protocol failure")
 }
 
-struct ChaCha;
-struct RecordCipher {
-    key: AeadKey,
-    iv: Iv,
-}
-impl Tls13AeadAlgorithm for ChaCha {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
-        Box::new(RecordCipher { key, iv })
-    }
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
-        Box::new(RecordCipher { key, iv })
-    }
-    fn key_len(&self) -> usize {
-        aead::KEY_LEN
-    }
-    fn extract_keys(
-        &self,
-        key: AeadKey,
-        iv: Iv,
-    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
-    }
-}
-impl MessageEncrypter for RecordCipher {
-    fn encrypt(
-        &mut self,
-        msg: OutboundPlainMessage<'_>,
-        seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
-        let ciphertext_len = aead::sealed_len(msg.payload.len()).ok_or(Error::EncryptError)?;
-        let mut payload_bytes = Zeroizing::new(Vec::with_capacity(msg.payload.len()));
-        msg.payload.copy_to_vec(&mut payload_bytes);
-        let plain = Zeroizing::new(
-            record::inner_plaintext(&payload_bytes, u8::from(msg.typ)).ok_or(Error::EncryptError)?,
-        );
-        let mut ciphertext = vec![0; ciphertext_len];
-        let key = self
-            .key
-            .as_ref()
-            .try_into()
-            .map_err(|_| Error::EncryptError)?;
-        libcrux_chacha20poly1305::encrypt(
-            key,
-            &plain,
-            &mut ciphertext,
-            &record::aad(ciphertext_len),
-            &aead::nonce(self.iv.as_ref(), seq).ok_or(Error::EncryptError)?,
-        )
-        .map_err(|_| Error::EncryptError)?;
-        let mut payload = PrefixedPayload::with_capacity(ciphertext.len());
-        payload.extend_from_slice(&ciphertext);
-        Ok(OutboundOpaqueMessage::new(
-            ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_2,
-            payload,
-        ))
-    }
-    fn encrypted_payload_len(&self, len: usize) -> usize {
-        record::encrypted_payload_len(len)
-    }
-}
-impl MessageDecrypter for RecordCipher {
-    fn decrypt<'a>(
-        &mut self,
-        mut msg: InboundOpaqueMessage<'a>,
-        seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, Error> {
-        let len = aead::plaintext_len(msg.payload.len()).ok_or(Error::DecryptError)?;
-        let mut plain = Zeroizing::new(vec![0; len]);
-        let key = self
-            .key
-            .as_ref()
-            .try_into()
-            .map_err(|_| Error::DecryptError)?;
-        let authenticated = libcrux_chacha20poly1305::decrypt(
-            key,
-            &mut plain,
-            &msg.payload,
-            &record::aad(msg.payload.len()),
-            &aead::nonce(self.iv.as_ref(), seq).ok_or(Error::DecryptError)?,
-        )
-        .is_ok();
-        // A reported crypto failure preserves rustls' ciphertext buffer exactly.
-        if !aead::release(authenticated, &plain, &mut msg.payload[..len]) {
-            return Err(Error::DecryptError);
-        }
-        msg.payload.truncate(len);
-        unpad_message(msg)
-    }
-}
-
-// Conversion and error wiring remain shell; byte decisions are proven in record.
-fn unpad_message(mut msg: InboundOpaqueMessage<'_>) -> Result<InboundPlainMessage<'_>, Error> {
-    let unpadded = record::unpad(&msg.payload).map_err(|error| match error {
-        record::UnpadError::Oversized => Error::PeerSentOversizedRecord,
-        record::UnpadError::NoContentType => rustls::PeerMisbehaved::IllegalTlsInnerPlaintext.into(),
-        record::UnpadError::ChangeCipherSpec => rustls::PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into(),
-    })?;
-    msg.typ = ContentType::from(unpadded.typ);
-    msg.version = ProtocolVersion::TLSv1_3;
-    Ok(msg.into_plain_message_range(0..unpadded.len))
-}
-
-#[derive(Debug)]
-struct P256Verify;
-impl SignatureVerificationAlgorithm for P256Verify {
-    fn public_key_alg_id(&self) -> AlgorithmIdentifier {
-        alg_id::ECDSA_P256
-    }
-    fn signature_alg_id(&self) -> AlgorithmIdentifier {
-        alg_id::ECDSA_SHA256
-    }
-    fn verify_signature(
-        &self,
-        public: &[u8],
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<(), pki_types::InvalidSignature> {
-        use libcrux_ecdsa::p256::{PublicKey, Signature};
-        let invalid = |_| pki_types::InvalidSignature;
-        // TLS/webpki use an uncompressed SEC1 point, not arbitrary raw coordinates.
-        if !record::p256_point_shape(public) {
-            return Err(pki_types::InvalidSignature);
-        }
-        let public = PublicKey::try_from(public).map_err(invalid)?;
-        let signature = Signature::from_der(signature).map_err(invalid)?;
-        libcrux_ecdsa::p256::verify(
-            libcrux_sha2::Algorithm::Sha256,
-            message,
-            &signature,
-            &public,
-        )
-        .map_err(invalid)
-    }
-}
-
-#[derive(Debug)]
-struct P256KeyProvider;
-struct P256SigningKey {
-    scalar: Zeroizing<[u8; 32]>,
-    spki: pki_types::SubjectPublicKeyInfoDer<'static>,
-}
-impl fmt::Debug for P256SigningKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("P256SigningKey")
-    }
-}
-impl crypto::KeyProvider for P256KeyProvider {
-    fn load_private_key(&self, key: PrivateKeyDer<'static>) -> Result<Arc<dyn SigningKey>, Error> {
-        use pkcs8::der::Decode;
-        let invalid = || Error::General("expected a PKCS8 P-256 key".into());
-        let PrivateKeyDer::Pkcs8(der) = key else {
-            return Err(invalid());
-        };
-        let info =
-            pkcs8::PrivateKeyInfo::from_der(der.secret_pkcs8_der()).map_err(|_| invalid())?;
-        let curve = pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.3.1.7");
-        if info.algorithm.oid != pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.2.1")
-            || info.algorithm.parameters_oid().map_err(|_| invalid())? != curve
-        {
-            return Err(invalid());
-        }
-        let ec = sec1::EcPrivateKey::from_der(info.private_key).map_err(|_| invalid())?;
-        if ec
-            .parameters
-            .is_some_and(|p| p.named_curve() != Some(curve))
-        {
-            return Err(invalid());
-        }
-        let scalar: [u8; 32] = ec.private_key.try_into().map_err(|_| invalid())?;
-        let scalar = Zeroizing::new(scalar);
-        let private =
-            libcrux_ecdsa::p256::PrivateKey::try_from(scalar.as_slice()).map_err(|_| invalid())?;
-        let public = private.public_key().map_err(|_| invalid())?;
-        let mut point = vec![4];
-        point.extend_from_slice(&public.0);
-        let spki = rustls::sign::public_key_to_spki(&alg_id::ECDSA_P256, point);
-        Ok(Arc::new(P256SigningKey { scalar, spki }))
-    }
-}
-struct P256Signer(Zeroizing<[u8; 32]>);
-impl fmt::Debug for P256Signer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("P256Signer")
-    }
-}
-impl SigningKey for P256SigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
-        let offered: Vec<u16> = offered.iter().copied().map(u16::from).collect();
-        record::offers(&offered, 0x0403)
-            .then(|| Box::new(P256Signer(self.scalar.clone())) as Box<dyn Signer>)
-    }
-    fn algorithm(&self) -> SignatureAlgorithm {
-        SignatureAlgorithm::ECDSA
-    }
-    fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer<'_>> {
-        Some(self.spki.clone())
-    }
-}
-impl Signer for P256Signer {
-    fn scheme(&self) -> SignatureScheme {
-        SignatureScheme::ECDSA_NISTP256_SHA256
-    }
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        let invalid = |_| Error::General("P-256 signing failed".into());
-        let private =
-            libcrux_ecdsa::p256::PrivateKey::try_from(self.0.as_slice()).map_err(invalid)?;
-        let signature = libcrux_ecdsa::p256::rand::sign(
-            libcrux_sha2::Algorithm::Sha256,
-            message,
-            &private,
-            &mut OsRandom,
-        )
-        .map_err(invalid)?;
-        Ok(signature.to_der().to_vec())
-    }
-}
-
-pub fn load_config(directory: &Path) -> io::Result<Arc<rustls::ServerConfig>> {
-    let certs = pki_types::CertificateDer::pem_file_iter(directory.join("cert.pem"))
-        .map_err(io::Error::other)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(io::Error::other)?;
-    let key = PrivateKeyDer::from_pem_file(directory.join("key.pem")).map_err(io::Error::other)?;
-    server_config(certs, key).map_err(io::Error::other)
-}
-
-pub fn server_config(
-    certs: Vec<pki_types::CertificateDer<'static>>,
-    key: PrivateKeyDer<'static>,
-) -> Result<Arc<rustls::ServerConfig>, Error> {
-    let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(provider()))
-        .with_protocol_versions(&[&rustls::version::TLS13])
-        .and_then(|b| b.with_no_client_auth().with_single_cert(certs, key))?;
-    config.alpn_protocols = vec![b"http/1.1".to_vec()];
-    // Disable resumption: no ticket-encryption or cache operation needs another provider.
-    config.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
-    config.send_tls13_tickets = 0;
-    Ok(Arc::new(config))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crypto::KeyProvider;
-    use std::{
-        io::{Read, Write},
-        net::{TcpListener, TcpStream},
-        sync::atomic::Ordering,
-        time::Duration,
+fn algorithms(group: u16) -> io::Result<Algorithms> {
+    let kem = match group {
+        0x11ec => KemScheme::X25519MlKem768,
+        29 => KemScheme::X25519,
+        23 => KemScheme::Secp256r1,
+        _ => return Err(invalid()),
     };
+    Ok(Algorithms::new(
+        HashAlgorithm::SHA256,
+        AeadAlgorithm::Chacha20Poly1305,
+        SignatureScheme::EcdsaSecp256r1Sha256,
+        kem,
+        false,
+        false,
+    ))
+}
 
-    struct CertificateKey {
-        key: Arc<dyn SigningKey>,
-        public: Vec<u8>,
+pub fn read_record(socket: &mut impl Read) -> io::Result<Vec<u8>> {
+    let mut header = [0; 5];
+    if socket.read(&mut header[..1])? == 0 {
+        return Ok(Vec::new());
     }
-    impl rcgen::PublicKeyData for CertificateKey {
-        fn der_bytes(&self) -> &[u8] {
-            &self.public
-        }
-        fn algorithm(&self) -> &'static rcgen::SignatureAlgorithm {
-            &rcgen::PKCS_ECDSA_P256_SHA256
-        }
+    socket.read_exact(&mut header[1..])?;
+    let len = u16::from_be_bytes([header[3], header[4]]) as usize;
+    if len == 0 || len > hello::RECORD_LIMIT - 5 || header[1] != 3 || !(1..=3).contains(&header[2])
+    {
+        return Err(invalid());
     }
-    impl rcgen::SigningKey for CertificateKey {
-        fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, rcgen::Error> {
-            Ok(self
-                .key
-                .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
-                .unwrap()
-                .sign(msg)
-                .unwrap())
-        }
-    }
-    fn configs() -> (Arc<rustls::ServerConfig>, Arc<rustls::ClientConfig>) {
-        use pkcs8::der::{asn1::AnyRef, Encode};
-        let private = libcrux_ecdsa::p256::PrivateKey::random(&mut OsRandom).unwrap();
-        let mut public = vec![4];
-        public.extend_from_slice(&private.public_key().unwrap().0);
-        let curve = pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.3.1.7");
-        let ec = sec1::EcPrivateKey {
-            private_key: private.as_ref(),
-            parameters: None,
-            public_key: None,
+    let mut record = header.to_vec();
+    record.resize(len + 5, 0);
+    socket.read_exact(&mut record[5..])?;
+    Ok(record)
+}
+
+pub struct BertieStream<S> {
+    socket: S,
+    state: Option<Server>,
+    pending: Vec<u8>,
+    offset: usize,
+}
+impl<S: Read + Write> BertieStream<S> {
+    pub fn accept(mut socket: S, config: &Config) -> io::Result<Self> {
+        let record = read_record(&mut socket)?;
+        let choice = hello::choose(&record).ok_or_else(invalid)?;
+        // Only bounded numeric identifiers are logged; no peer record contents.
+        eprintln!(
+            "tls offered_groups={:?} group={}",
+            choice.offered_groups, choice.group
+        );
+        let db = ServerDB::new(
+            choice.sni.into(),
+            config.certificate.as_slice().into(),
+            config.key.as_slice().into(),
+            None,
+        );
+        let mut ks = TLSkeyscheduler {
+            keys: HashMap::new(),
         };
-        let ec_der = Zeroizing::new(ec.to_der().unwrap());
-        let curve_der = curve.to_der().unwrap();
-        let alg = pkcs8::AlgorithmIdentifierRef {
-            oid: pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.2.1"),
-            parameters: Some(AnyRef::try_from(curve_der.as_slice()).unwrap()),
-        };
-        let info = pkcs8::PrivateKeyInfo::new(alg, &ec_der);
-        let der = pki_types::PrivatePkcs8KeyDer::from(info.to_der().unwrap());
-        let key = P256KeyProvider
-            .load_private_key(PrivateKeyDer::Pkcs8(der.clone_key()))
-            .unwrap();
-        let certificate_key = CertificateKey { key, public };
-        let mut params = rcgen::CertificateParams::new(vec!["localhost".into()]).unwrap();
-        params.serial_number = Some(1u64.into());
-        let cert = params.self_signed(&certificate_key).unwrap().der().clone();
-        let server = server_config(vec![cert.clone()], PrivateKeyDer::Pkcs8(der)).unwrap();
-        let mut roots = rustls::RootCertStore::empty();
-        roots.add(cert).unwrap();
-        let mut client = rustls::ClientConfig::builder_with_provider(Arc::new(provider()))
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .unwrap()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-        client.alpn_protocols = vec![b"http/1.1".to_vec()];
-        (server, Arc::new(client))
-    }
-    fn exchange(
-        server: Arc<rustls::ServerConfig>,
-        client: Arc<rustls::ClientConfig>,
-        request: &[u8],
-        chunk: usize,
-    ) -> (Vec<u8>, usize) {
-        exchange_policy(
-            server,
-            client,
-            request,
-            chunk,
-            transport_core::http::Policy {
-                unknown_drop: false,
-                guarded_drop: 0,
-                log_limit: 60,
-            },
+        let (sh, sf, state) = Server::accept(
+            algorithms(choice.group)?,
+            db,
+            &record.into(),
+            &mut rand::rng(),
+            &mut ks,
         )
-    }
-    fn exchange_policy(
-        server: Arc<rustls::ServerConfig>,
-        client: Arc<rustls::ClientConfig>,
-        request: &[u8],
-        chunk: usize,
-        policy: transport_core::http::Policy,
-    ) -> (Vec<u8>, usize) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        let worker = std::thread::spawn(move || {
-            let (socket, _) = listener.accept().unwrap();
-            let state = crate::ServerState::with_policy(policy);
-            crate::transport::serve_tcp(socket, Some(server), &state, std::time::Instant::now())
-                .unwrap();
-            state.handler_calls.load(Ordering::Relaxed)
-        });
-        let socket = TcpStream::connect(addr).unwrap();
-        socket
-            .set_read_timeout(Some(Duration::from_secs(4)))
-            .unwrap();
-        socket
-            .set_write_timeout(Some(Duration::from_secs(4)))
-            .unwrap();
-        let conn = rustls::ClientConnection::new(client, "localhost".try_into().unwrap()).unwrap();
-        let mut stream = rustls::StreamOwned::new(conn, socket);
-        stream.conn.complete_io(&mut stream.sock).unwrap();
-        assert_eq!(
-            stream.conn.protocol_version(),
-            Some(ProtocolVersion::TLSv1_3)
-        );
-        assert_eq!(
-            stream.conn.negotiated_cipher_suite().unwrap().suite(),
-            CipherSuite::TLS13_CHACHA20_POLY1305_SHA256
-        );
-        assert_eq!(stream.conn.alpn_protocol(), Some(b"http/1.1".as_slice()));
-        assert_eq!(
-            stream.conn.negotiated_key_exchange_group().unwrap().name(),
-            NamedGroup::X25519
-        );
-        let parts: Vec<_> = request.chunks(chunk).collect();
-        if parts.is_empty() {
-            stream.conn.send_close_notify();
-            stream.flush().unwrap();
+        .map_err(|_| invalid())?;
+        socket.write_all(&sh.declassify())?;
+        socket.write_all(&[20, 3, 3, 0, 1, 1])?;
+        socket.write_all(&sf.declassify())?;
+        socket.flush()?;
+        let mut finished = read_record(&mut socket)?;
+        if finished == [20, 3, 3, 0, 1, 1] {
+            finished = read_record(&mut socket)?;
         }
-        for (index, part) in parts.iter().enumerate() {
-            stream.conn.writer().write_all(part).unwrap();
-            if index + 1 == parts.len() {
-                stream.conn.send_close_notify();
-            }
-            stream.flush().unwrap();
-        }
-        let mut reply = Vec::new();
-        stream.read_to_end(&mut reply).unwrap();
-        (reply, worker.join().unwrap())
-    }
-    #[test]
-    fn idle_and_partial_deadlines_tcp_and_tls() {
-        // Real production durations on real sockets, in parallel to bound suite time.
-        let mut cases = Vec::new();
-        for tls in [false, true] {
-            for scenario in ["delayed", "idle", "partial", "handshake_budget"] {
-                if !tls && scenario == "handshake_budget" {
-                    continue;
-                }
-                cases.push(std::thread::spawn(move || {
-                    let (server, client) = configs();
-                    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-                    let address = listener.local_addr().unwrap();
-                    let worker = std::thread::spawn(move || {
-                        let (socket, _) = listener.accept().unwrap();
-                        let state = crate::ServerState::with_policy(transport_core::http::Policy {
-                            unknown_drop: false,
-                            guarded_drop: 0,
-                            log_limit: 60,
-                        });
-                        crate::transport::serve_tcp(
-                            socket,
-                            tls.then_some(server),
-                            &state,
-                            std::time::Instant::now(),
-                        )
-                        .unwrap();
-                        state.handler_calls.load(Ordering::Relaxed)
-                    });
-                    let socket = TcpStream::connect(address).unwrap();
-                    socket
-                        .set_read_timeout(Some(Duration::from_secs(20)))
-                        .unwrap();
-                    let start = std::time::Instant::now();
-                    if scenario == "handshake_budget" {
-                        std::thread::sleep(Duration::from_secs(3));
-                    }
-                    let mut stream: Box<dyn TestStream> = if tls {
-                        let conn =
-                            rustls::ClientConnection::new(client, "localhost".try_into().unwrap())
-                                .unwrap();
-                        let mut stream = rustls::StreamOwned::new(conn, socket);
-                        stream.conn.complete_io(&mut stream.sock).unwrap();
-                        Box::new(stream)
-                    } else {
-                        Box::new(socket)
-                    };
-                    match scenario {
-                        "delayed" => {
-                            std::thread::sleep(Duration::from_secs(3));
-                            stream
-                                .write_all(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n")
-                                .unwrap();
-                            stream.flush().unwrap();
-                        }
-                        "partial" => {
-                            stream.write_all(b"GET / HTTP/1.1\r\nHost:").unwrap();
-                            stream.flush().unwrap();
-                            std::thread::sleep(Duration::from_secs(3));
-                        }
-                        "idle" => std::thread::sleep(Duration::from_secs(16)),
-                        _ => {}
-                    }
-                    let mut response = Vec::new();
-                    stream.read_to_end(&mut response).unwrap();
-                    let calls = worker.join().unwrap();
-                    match scenario {
-                        "delayed" => {
-                            assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
-                            assert_eq!(calls, 1);
-                        }
-                        "partial" => {
-                            assert!(response.starts_with(b"HTTP/1.1 400 Bad Request\r\n"));
-                            assert_eq!(calls, 0);
-                        }
-                        _ => {
-                            assert!(response.is_empty());
-                            assert_eq!(calls, 0);
-                        }
-                    }
-                    // Includes client-side sleep; worker must finish near absolute15s,
-                    // even when the TLS handshake consumed the first3s.
-                    if scenario == "handshake_budget" {
-                        assert!(start.elapsed() >= Duration::from_secs(14));
-                        assert!(start.elapsed() < Duration::from_secs(17));
-                    }
-                }));
-            }
-        }
-        for case in cases {
-            case.join().unwrap();
-        }
+        let state = state
+            .read_handshake(&finished.into(), &mut ks)
+            .map_err(|_| invalid())?;
+        Ok(Self {
+            socket,
+            state: Some(state),
+            pending: Vec::new(),
+            offset: 0,
+        })
     }
 
-    include!("io_deadline_tests.rs");
-
-    trait TestStream: Read + Write {}
-    impl<T: Read + Write> TestStream for T {}
-
-    #[test]
-    fn idle_handshake_budget_is_absolute() {
-        for trickle in [false, true] {
-            let (server, _) = configs();
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            let address = listener.local_addr().unwrap();
-            let worker = std::thread::spawn(move || {
-                let (socket, _) = listener.accept().unwrap();
-                let start = std::time::Instant::now();
-                crate::transport::serve_tcp(
-                    socket,
-                    Some(server),
-                    &crate::ServerState::with_policy(transport_core::http::Policy {
-                        unknown_drop: false,
-                        guarded_drop: 0,
-                        log_limit: 60,
-                    }),
-                    start,
-                )
-                .unwrap();
-                start.elapsed()
-            });
-            let mut socket = TcpStream::connect(address).unwrap();
-            socket
-                .set_read_timeout(Some(Duration::from_secs(18)))
-                .unwrap();
-            if trickle {
-                // Incomplete TLS record, sent slowly: raw bytes must not reset idle.
-                for byte in [22, 3, 3, 0] {
-                    socket.write_all(&[byte]).unwrap();
-                    std::thread::sleep(Duration::from_secs(3));
-                }
-            }
-            let mut response = Vec::new();
-            socket.read_to_end(&mut response).unwrap();
-            assert!(response.is_empty());
-            let elapsed = worker.join().unwrap();
-            assert!(elapsed >= Duration::from_secs(14));
-            assert!(elapsed < Duration::from_secs(17), "{elapsed:?}");
+    pub fn close_notify(mut self) -> io::Result<S> {
+        if let Some(state) = self.state.take() {
+            let alert = state.close_notify().map_err(|_| invalid())?;
+            self.socket.write_all(&alert.declassify())?;
+            self.socket.flush()?;
         }
+        Ok(self.socket)
     }
-
-    #[test]
-    fn tls_routes_and_safari() {
-        let (server, client) = configs();
-        for (wire, status) in [
-            (
-                b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n".as_slice(),
-                "200 OK",
-            ),
-            (
-                include_bytes!("../tests/safari-root.http").as_slice(),
-                "200 OK",
-            ),
-            (
-                include_bytes!("../tests/safari-favicon.http").as_slice(),
-                "404 Not Found",
-            ),
-            (
-                include_bytes!("../tests/safari-https-root.http").as_slice(),
-                "200 OK",
-            ),
-            (
-                include_bytes!("../tests/safari-https-favicon.http").as_slice(),
-                "404 Not Found",
-            ),
-            (
-                include_bytes!("../tests/firefox-https-root.http").as_slice(),
-                "200 OK",
-            ),
-            (
-                include_bytes!("../tests/firefox-https-favicon.http").as_slice(),
-                "404 Not Found",
-            ),
-            (
-                include_bytes!("../tests/brave-https-root.http").as_slice(),
-                "200 OK",
-            ),
-            (
-                include_bytes!("../tests/brave-https-favicon.http").as_slice(),
-                "404 Not Found",
-            ),
-            (
-                include_bytes!("../tests/brave-cache-disabled-https-root.http").as_slice(),
-                "200 OK",
-            ),
-        ] {
-            for chunk in [usize::MAX, 1, 7, 1024] {
-                let (reply, calls) = exchange(server.clone(), client.clone(), wire, chunk);
-                assert!(reply.starts_with(format!("HTTP/1.1 {status}\r\n").as_bytes()));
-                assert_eq!(calls, 1);
-            }
+}
+impl<S: Read + Write> Read for BertieStream<S> {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if out.is_empty() {
+            return Ok(0);
         }
+        while self.offset == self.pending.len() {
+            let record = read_record(&mut self.socket)?;
+            if record.is_empty() {
+                return Ok(0);
+            }
+            let state = self.state.take().ok_or_else(invalid)?;
+            let (data, next) = state.read(&record.into()).map_err(|_| invalid())?;
+            self.state = Some(next);
+            self.pending = data.map(|d| d.into_raw().declassify()).unwrap_or_default();
+            if self.pending.len() > 16384 {
+                self.state = None;
+                return Err(invalid());
+            }
+            self.offset = 0;
+        }
+        let n = out.len().min(self.pending.len() - self.offset);
+        out[..n].copy_from_slice(&self.pending[self.offset..self.offset + n]);
+        self.offset += n;
+        Ok(n)
     }
-    #[test]
-    fn default_policy_browser_fixtures_and_sensitive_names() {
-        let (server, client) = configs();
-        let default = transport_core::http::Policy::builtin();
-        for wire in [
-            include_bytes!("../tests/safari-https-root.http").as_slice(),
-            include_bytes!("../tests/firefox-https-root.http").as_slice(),
-            include_bytes!("../tests/brave-https-root.http").as_slice(),
-            include_bytes!("../tests/brave-cache-disabled-https-root.http").as_slice(),
-            include_bytes!("../tests/brave-dnt-https-root.http").as_slice(),
-        ] {
-            for chunk in [usize::MAX, 1, 7, 1024] {
-                let (reply, calls) =
-                    exchange_policy(server.clone(), client.clone(), wire, chunk, default);
-                assert!(reply.starts_with(b"HTTP/1.1 200"));
-                assert_eq!(calls, 1);
-            }
+}
+impl<S: Read + Write> Write for BertieStream<S> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.is_empty() {
+            return Ok(0);
         }
-        for name in [
-            "Content-Length",
-            "Transfer-Encoding",
-            "TE",
-            "Trailer",
-            "Expect",
-            "Upgrade",
-            "HTTP2-Settings",
-            "Proxy-Connection",
-            "Keep-Alive",
-            "Cookie",
-            "Authorization",
-            "Proxy-Authorization",
-            "Range",
-            "If-Range",
-            "If-Match",
-            "If-None-Match",
-            "If-Modified-Since",
-            "If-Unmodified-Since",
-            "Forwarded",
-            "X-Forwarded-For",
-            "X-Forwarded-Host",
-            "X-Forwarded-Proto",
-            "X-Real-IP",
-            "Via",
-            "Max-Forwards",
-        ] {
-            let name: String = name
-                .bytes()
-                .enumerate()
-                .map(|(i, b)| {
-                    char::from(if i % 2 == 0 {
-                        b.to_ascii_lowercase()
-                    } else {
-                        b.to_ascii_uppercase()
-                    })
-                })
-                .collect();
-            let wire = format!("GET / HTTP/1.1\r\n{name}: synthetic\r\n\r\n");
-            for chunk in [usize::MAX, 1, 7, 1024] {
-                let (reply, calls) = exchange_policy(
-                    server.clone(),
-                    client.clone(),
-                    wire.as_bytes(),
-                    chunk,
-                    default,
-                );
-                assert!(reply.starts_with(b"HTTP/1.1 400"));
-                assert_eq!(calls, 0);
-            }
-        }
-        let cookie = transport_core::http::parse_config(b"guarded Cookie drop").unwrap();
-        let (reply, calls) = exchange_policy(
-            server.clone(),
-            client.clone(),
-            b"GET / HTTP/1.1\r\nCookie: synthetic\r\n\r\n",
-            1,
-            cookie,
-        );
-        assert!(reply.starts_with(b"HTTP/1.1 200"));
-        assert_eq!(calls, 1);
-        let (reply, calls) = exchange(
-            server,
-            client,
-            include_bytes!("../tests/brave-dnt-https-root.http"),
-            7,
-        );
-        assert!(reply.starts_with(b"HTTP/1.1 400"));
-        assert_eq!(calls, 0);
+        let len = bytes.len().min(16384);
+        let state = self.state.take().ok_or_else(invalid)?;
+        let (record, next) = state
+            .write(AppData::new(bytes[..len].into()))
+            .map_err(|_| invalid())?;
+        self.socket.write_all(&record.declassify())?;
+        self.state = Some(next);
+        Ok(len)
     }
-    #[test]
-    fn tls_case_and_count_boundaries() {
-        let (server, client) = configs();
-        for name in [
-            "Host",
-            "Accept",
-            "Connection",
-            "User-Agent",
-            "Accept-Language",
-            "Accept-Encoding",
-            "Upgrade-Insecure-Requests",
-            "Priority",
-            "Referer",
-            "Sec-Fetch-Dest",
-            "Sec-Fetch-Site",
-            "Sec-Fetch-Mode",
-            "Sec-Fetch-User",
-            "Cache-Control",
-            "Sec-GPC",
-            "Sec-CH-UA",
-            "Sec-CH-UA-Mobile",
-            "Sec-CH-UA-Platform",
-            "Pragma",
-        ] {
-            for form in [
-                name.to_ascii_lowercase(),
-                name.to_ascii_uppercase(),
-                name.bytes()
-                    .enumerate()
-                    .map(|(i, b)| {
-                        if i % 2 == 0 {
-                            b.to_ascii_lowercase()
-                        } else {
-                            b.to_ascii_uppercase()
-                        }
-                    })
-                    .map(char::from)
-                    .collect(),
-            ] {
-                let wire = format!("GET / HTTP/1.1\r\n{form}: x\r\n\r\n");
-                for chunk in [usize::MAX, 1, 7, 1024] {
-                    let (reply, calls) =
-                        exchange(server.clone(), client.clone(), wire.as_bytes(), chunk);
-                    assert!(reply.starts_with(b"HTTP/1.1 200"));
-                    assert_eq!(calls, 1);
-                }
-            }
-        }
-        for name in ["Pragmas", "Pragm"] {
-            for chunk in [usize::MAX, 1, 7, 1024] {
-                let wire = format!("GET / HTTP/1.1\r\n{name}: x\r\n\r\n");
-                let (reply, calls) =
-                    exchange(server.clone(), client.clone(), wire.as_bytes(), chunk);
-                assert!(reply.starts_with(b"HTTP/1.1 400"));
-                assert_eq!(calls, 0);
-            }
-        }
-        for count in [24, 25] {
-            let wire = format!("GET / HTTP/1.1\r\n{}\r\n", "aCcEpT: x\r\n".repeat(count));
-            for chunk in [usize::MAX, 1, 7, 1024] {
-                let (reply, calls) =
-                    exchange(server.clone(), client.clone(), wire.as_bytes(), chunk);
-                assert!(reply.starts_with(if count == 24 {
-                    b"HTTP/1.1 200"
-                } else {
-                    b"HTTP/1.1 400"
-                }));
-                assert_eq!(calls, if count == 24 { 1 } else { 0 });
-            }
-        }
-    }
-    #[test]
-    fn malformed_tls_never_dispatches() {
-        let (server, client) = configs();
-        let mut corpus: Vec<Vec<u8>> = include_str!("../tests/malformed.hex")
-            .lines()
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .map(|l| {
-                l.split_whitespace()
-                    .map(|b| u8::from_str_radix(b, 16).unwrap())
-                    .collect()
-            })
-            .collect();
-        corpus.push(vec![]);
-        assert_eq!(corpus.len(), 48);
-        for name in [
-            "Accept-Language",
-            "Accept-Encoding",
-            "Upgrade-Insecure-Requests",
-            "Priority",
-            "Referer",
-            "Sec-Fetch-Dest",
-            "Sec-Fetch-Site",
-            "Sec-Fetch-Mode",
-            "Sec-Fetch-User",
-            "Cache-Control",
-            "Sec-GPC",
-            "Sec-CH-UA",
-            "Sec-CH-UA-Mobile",
-            "Sec-CH-UA-Platform",
-            "Pragma",
-        ] {
-            for line in [format!("{name}: "), format!("{name}: {}", "x".repeat(257))] {
-                corpus.push(format!("GET / HTTP/1.1\r\n{line}\r\n\r\n").into_bytes());
-            }
-        }
-        for name in [
-            "Accept-Languages",
-            "Refere",
-            "Sec-Fetch-Destination",
-            "Sec-Fetch-",
-            "Sec-Fetch-Users",
-            "Sec-Fetch-Use",
-            "sec-ch-ua-mobil",
-            "Pragmas",
-            "Pragm",
-            "content-length",
-            "TRANSFER-ENCODING",
-            "cOoKiE",
-        ] {
-            corpus.push(format!("GET / HTTP/1.1\r\n{name}: x\r\n\r\n").into_bytes());
-        }
-        for (i, request) in corpus.iter().enumerate() {
-            // One TLS application write keeps coalesced trailing bytes in the same read.
-            let (reply, calls) = exchange(server.clone(), client.clone(), request, usize::MAX);
-            assert!(
-                reply.starts_with(b"HTTP/1.1 400 Bad Request\r\n"),
-                "case {i}"
-            );
-            assert_eq!(calls, 0, "case {i}");
-        }
-    }
-    #[test]
-    fn aead_rejects_tampered_record_and_x25519_rejects_low_order() {
-        use crypto::SupportedKxGroup;
-        let plain = b"authenticated";
-        let key = [7; 32];
-        let nonce = [3; 12];
-        let aad = b"header";
-        let mut ciphertext = vec![0; plain.len() + 16];
-        libcrux_chacha20poly1305::encrypt(&key, plain, &mut ciphertext, aad, &nonce).unwrap();
-        ciphertext[0] ^= 1;
-        let mut out = vec![0; plain.len()];
-        assert!(
-            libcrux_chacha20poly1305::decrypt(&key, &mut out, &ciphertext, aad, &nonce).is_err()
-        );
-        assert!(X25519.start().unwrap().complete(&[0; 32]).is_err());
-        assert!(X25519.start().unwrap().complete(&[1; 31]).is_err());
-    }
-    #[test]
-    fn hkdf_rfc5869_case1_and_hash_fork() {
-        use crypto::{
-            hash::{Context, Hash},
-            tls13::Hkdf as _,
-        };
-        let expander = Hkdf.extract_from_secret(Some(&(0..=12).collect::<Vec<u8>>()), &[0x0b; 22]);
-        let mut out = [0; 42];
-        expander
-            .expand_slice(
-                &[
-                    &[0xf0, 0xf1, 0xf2],
-                    &[0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9],
-                ],
-                &mut out,
-            )
-            .unwrap();
-        let expected =
-            "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865";
-        assert_eq!(
-            out.iter().map(|b| format!("{b:02x}")).collect::<String>(),
-            expected
-        );
-        assert!(expander.expand_slice(&[], &mut vec![0; 8161]).is_err());
-        let mut hash = HashContext(libcrux_sha2::Sha256::new());
-        hash.update(b"ab");
-        let mut fork = hash.fork();
-        fork.update(b"c");
-        assert_eq!(fork.finish().as_ref(), Sha256.hash(b"abc").as_ref());
-        assert_eq!(hash.fork_finish().as_ref(), Sha256.hash(b"ab").as_ref());
+    fn flush(&mut self) -> io::Result<()> {
+        self.socket.flush()
     }
 }
 
+// Fixed TLS 1.3 ClientHello: ChaCha20/SHA256, ECDSA P-256, supported
+// MLKEM768/X25519/P-256 groups, X25519 and P-256 public basepoint shares.
+// Public fixture only: no private key or cryptography is needed for readiness.
+const HEALTH_HELLO: &[u8] = &[
+    0x16, 0x03, 0x03, 0x00, 0xcb, 0x01, 0x00, 0x00, 0xc7, 0x03, 0x03, 0x00, 0x01, 0x02, 0x03, 0x04,
+    0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
+    0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x00, 0x00, 0x02, 0x13, 0x03,
+    0x01, 0x00, 0x00, 0x9c, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x0c, 0x00, 0x00, 0x09, 0x6c, 0x6f, 0x63,
+    0x61, 0x6c, 0x68, 0x6f, 0x73, 0x74, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x06, 0x11, 0xec, 0x00, 0x1d,
+    0x00, 0x17, 0x00, 0x0d, 0x00, 0x04, 0x00, 0x02, 0x04, 0x03, 0x00, 0x2b, 0x00, 0x03, 0x02, 0x03,
+    0x04, 0x00, 0x33, 0x00, 0x6b, 0x00, 0x69, 0x00, 0x1d, 0x00, 0x20, 0x09, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x17, 0x00, 0x41, 0x04,
+    0x6b, 0x17, 0xd1, 0xf2, 0xe1, 0x2c, 0x42, 0x47, 0xf8, 0xbc, 0xe6, 0xe5, 0x63, 0xa4, 0x40, 0xf2,
+    0x77, 0x03, 0x7d, 0x81, 0x2d, 0xeb, 0x33, 0xa0, 0xf4, 0xa1, 0x39, 0x45, 0xd8, 0x98, 0xc2, 0x96,
+    0x4f, 0xe3, 0x42, 0xe2, 0xfe, 0x1a, 0x7f, 0x9b, 0x8e, 0xe7, 0xeb, 0x4a, 0x7c, 0x0f, 0x9e, 0x16,
+    0x2b, 0xce, 0x33, 0x57, 0x6b, 0x31, 0x5e, 0xce, 0xcb, 0xb6, 0x40, 0x68, 0x37, 0xbf, 0x51, 0xf5,
+];
+
+/// Unauthenticated loopback readiness: a bounded ServerHello, not an HTTP check.
+pub fn healthcheck(port: u16) -> io::Result<bool> {
+    use std::{
+        net::{Shutdown, TcpStream},
+        time::{Duration, Instant},
+    };
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut socket =
+        TcpStream::connect_timeout(&(([127, 0, 0, 1], port).into()), Duration::from_secs(2))?;
+    let result = (|| {
+        socket.set_write_timeout(Some(deadline.saturating_duration_since(Instant::now())))?;
+        // A short write is a failed probe; never retry past the absolute budget.
+        if socket.write(HEALTH_HELLO)? != HEALTH_HELLO.len() {
+            return Ok(false);
+        }
+        let mut header = [0; 5];
+        healthcheck_read(&mut socket, &mut header, deadline)?;
+        let len = u16::from_be_bytes([header[3], header[4]]) as usize;
+        if header[..3] != [0x16, 3, 3] || !(44..=16384).contains(&len) {
+            return Ok(false);
+        }
+        let mut body = [0; 16384];
+        healthcheck_read(&mut socket, &mut body[..len], deadline)?;
+        let handshake_len = u32::from_be_bytes([0, body[1], body[2], body[3]]) as usize;
+        Ok(body[0] == 2 && (40..=len - 4).contains(&handshake_len))
+    })();
+    let _ = socket.shutdown(Shutdown::Both);
+    result
+}
+
+fn healthcheck_read(
+    socket: &mut std::net::TcpStream,
+    mut bytes: &mut [u8],
+    deadline: std::time::Instant,
+) -> io::Result<()> {
+    while !bytes.is_empty() {
+        let remaining = deadline
+            .checked_duration_since(std::time::Instant::now())
+            .ok_or_else(|| io::Error::from(io::ErrorKind::TimedOut))?;
+        socket.set_read_timeout(Some(remaining))?;
+        let n = socket.read(bytes)?;
+        if n == 0 {
+            return Err(io::ErrorKind::UnexpectedEof.into());
+        }
+        bytes = &mut bytes[n..];
+    }
+    Ok(())
+}
+
 #[cfg(test)]
-#[path = "record_tests.rs"]
-mod record_tests;
+#[path = "tls_test_provider.rs"]
+mod test_provider;
+
+#[cfg(test)]
+impl Config {
+    fn from_der(certificate: &[u8], key: &[u8]) -> io::Result<Arc<Self>> {
+        let key = p256::SecretKey::from_pkcs8_der(key).map_err(|_| invalid())?;
+        Ok(Arc::new(Self {
+            certificate: certificate.to_vec(),
+            key: Zeroizing::new(key.to_bytes().to_vec()),
+        }))
+    }
+}

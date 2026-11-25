@@ -1,0 +1,27 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build and test
+        run: |
+          mkdir -p logs
+          cargo build --locked > logs/build.log 2>&1 || { tail -n 40 logs/build.log; exit 1; }
+          cargo test --locked --workspace > logs/tests.log 2>&1 || { tail -n 40 logs/tests.log; exit 1; }
+      - name: Install cargo-deny
+        run: |
+          cargo install cargo-deny --version 0.20.2 --locked > logs/deny-install.log 2>&1 || { tail -n 40 logs/deny-install.log; exit 1; }
+      - name: Check dependencies with deny.toml
+        run: |
+          cargo deny --all-features check > logs/deny.log 2>&1 || { tail -n 40 logs/deny.log; exit 1; }

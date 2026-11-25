@@ -241,3 +241,91 @@ Evidence: logs/stage13-*.
 - M2: complete — 211/317/9 proofs, zero errors; 52/52 tests; 15/15 mutants killed, zero survivors/invalid; all exec/source tokens preserved; binary differs only with source-location metadata, .text unchanged at 706072 bytes.
 - M3: complete — eight catalog entries cover all 72 spec functions and seven tier documents; catalog checker/guides pass, including negative checker probes.
 - M4: complete — stage 18 row (no port, layout only); 204 local links/zero broken; catalog zero errors; runtime shell/tests untouched; milestone commits use Dudley; no push or long-lived container operation. Final clean status verified after commit.
+
+## Stage 19 — bertie-boundary
+
+Authoritative spec: specs/development/BERTIE-BOUNDARY.md. Working only on bertie-boundary;
+existing untracked codex-run-stage19.log is operator output and is left alone.
+
+- M1: locally passed — hello 30/0; roots 211/347/9, zero errors; 54 workspace tests; five new mutants killed after successful refinement, zero survivors/invalid. Existing fifteen rerun at final acceptance.
+- M2: implemented, acceptance BLOCKED — production tree has no rustls/webpki/pki-types; native and Nix TLS tests reject some Bertie ECDSA signatures as noncanonical DER. Original HTTP/core assertions retained; no upstream patch or verification relaxation.
+- M3: BLOCKED — final native workspace tests 55 passed / 2 failed (57 total); Linux Nix tests also fail on Bertie DER. Final Nix check and image fail TLS tests; final musl audit succeeds (Bertie 1,184 in-binary lines vs stage 17 total 5,095; old TLS crates zero); no container on 8099, so live comparison/interop not run. Reproduction scripts added.
+- Acceptance: NOT MET — native proofs 211/347/9 plus hello30 pass, five M1 hello mutants caught, production tree rustls-free. Final twenty-mutant run refuses failing TLS baseline; release gates retained. No browser, live, coverage or independent acceptance claim.
+
+## Stage 19 — rerun on fixed Bertie
+
+Authoritative rerun: dev/CODEX_PROMPT-stage19b.md and Andrew's supplied amendments.
+Started from edf43c0 (dac4d41 plus the committed rerun prompt), on bertie-boundary.
+
+- R1 (pin + native tests): PASS locally — local git rev 8ff624adda8b74c8c0edbec29b7c92492164233f;
+  unchanged Bertie default features api/std/defensive; only that local source allowed by deny.toml.
+  Native proofs 211/347/9 + hello30 and locked workspace tests 57/57 pass.
+  Strict rustls detector: 10,000 native production-binary handshakes, zero failures
+  (550.93 seconds). Final mutants: 20/20 caught, zero survivors/invalid; all refinement gates
+  pass, all twenty fail actual tests, seventeen also fail intent.
+- R2 (Nix + image): BLOCKED by cargo-deny advisories (eleven vulnerability findings, two
+  unmaintained dependencies); pure exact-revision source fetching works. Linked worktree and
+  Git metadata are mounted read-only. Final verdict: advisories FAILED; bans/licenses/sources
+  ok. Both flake check and image-static fail that gate. Linux glibc/musl tests each pass 55.
+  No pending-push blocker: publishing this pin alone cannot clear the advisory gate.
+- R3 (container + live + measurements): container/live blocked by R2; no container created.
+  Separate musl tests pass (55); fresh audit: Bertie 1,199 in-binary lines / 671 functions
+  versus stage 17 TLS total 5,095; old TLS crates zero. This is not an image measurement.
+  formal-coverage executable unavailable; no new percentage claimed.
+- Acceptance: NOT MET — all native proof/test/mutant gates pass, but Nix check and image
+  fail the unchanged dependency advisory gate. Container/live/image audit and browsers are
+  not accepted; formal-coverage unavailable. No pending-push source blocker. No push.
+  R1 601228a; R2 774a59a; R3 d699d0e; final commit follows. Independent acceptance remains
+  Andrew/Dudley's.
+
+## Stage 19 — dependency update
+
+- B1: PARTIAL — new worktree/branch, commits fd49638 + 03374d4; AEAD and Ed25519
+  0.0.9 (minimum compatible patched releases), transitive Poly1305 0.0.6. Bertie
+  member suite: 15 lib + 2 handshake + 1 doctest pass; 2 original ignored and
+  1 network-filtered. No source/API/default-feature change. KEM update blocked:
+  minimum patched 0.0.10 removes existing Kyber-draft API, conflicting with the
+  preservation fence. Fresh hax/F* Der/Tls13formats checks blocked before extraction
+  by missing historical toolchain cache; location requested, no proof claim.
+- B2: complete remediation subset; advisory gate still FAILS — exact local 03374d4 pin; stable p256 0.14.0 resolves patched
+  crypto-bigint 0.7.11 without source changes. Exactly two requested build-proc-macro
+  unmaintained ignores, final inverse-tree evidence; old third ignore removed.
+  Native proofs 211/347/9 + hello30, 57 locked tests, no production rustls pass.
+  Strict 10,000 handshakes pass with zero failures (424.43 s); twenty mutants
+  20/20 caught, zero survivors/invalid, all actual test failures, 17 intent kills.
+  Nix dependency gate FAIL:
+  6 vulnerabilities in retained KEM/ECDH/SHA3 plus unmaintained proc-macro-error2;
+  bans/licenses/sources ok. Snapshot/clock/flake gates unchanged.
+- B3: BLOCKED by failed Nix dependency gate — no full check/image build, container,
+  eighteen-request comparison, interop or shipped-image audit attempted. No
+  bertie-boundary/proven-io-ref container exists; other containers unchanged.
+- Acceptance: NOT MET — awaiting KEM compatibility scope decision and existing
+  hax/F* toolchain location and eventual release gates. Final native receipts
+  validated in logs/stage19c-summary.json; independent acceptance outstanding.
+  B2 aacb09c; B3 5757723 records the blocked release; final receipt commit follows.
+  No push or independent acceptance claim.
+
+## Stage 19 — our Bertie
+
+- D1: complete locally — d34ad5e; full workspace 25 passed, zero failures; KEM wire-size/shared-secret test and all three group handshakes pass.
+- D1b: partial — a20fa69 + 2f2c2c2 + e1af495; final 25 Bertie workspace tests pass, real unsupported wire offers reject, RSA/Ed25519 removed, client gated; production packages 112→109. scratch-server healthcheck imports Client in production, so its build now fails E0432. Andrew decision requested before changing healthcheck contract or enabling client feature.
+- D2: toolchain rebuilt at bertie-toolchain with pinned nightly/hax/F*/Z3; baseline/current hax 21 files each pass. Der strict F* PASS (333 s). Six checks FAIL at crypto.fsti:9: missing Non_hax namespace introduced by e1af495. Stopped without proof/source/model patches.
+- D3: candidate e1af495 pin/policy/tree recorded; Nix cargo-deny PASS, native proofs 211/347/9 + hello30 PASS. Native tests E0432; mutant test baseline stops, 10,000 loop unavailable. Healthcheck/client-feature decision required.
+- D4: Nix deny PASS; full Nix check FAILS E0432. No image/container/reference/live checks or after audit. Fresh before lines 1,200; after unavailable.
+- Acceptance: NOT MET — unresolved production healthcheck/client conflict plus crypto extraction namespace error. Independent acceptance outstanding; no image or live result.
+
+D2 ce83b0d; D3 dcdad81; D4 74749b4 (blocked release); all checkpoints
+use configured Dudley. Bertie revisions d34ad5e, a20fa69, 2f2c2c2, e1af495 use
+configured Andrew VanLoo. No pushes or hook bypasses.
+
+Final receipt assertions pass (logs/stage19d-summary.json): protected paths
+unchanged, seven F* attempts / Der alone passes, no final native test/mutant/loop
+or release acceptance. Final documentation-only receipts are recorded here; no push.
+
+## Stage 19 — E
+
+- E1: complete locally — Bertie e6ea574; hax extraction 21 files, all seven strict F* checks pass with all VCs discharged and zero errors; models/proof patches unchanged. Trusted RNG/wrappers documented. Bertie workspace 25/0, all three groups pass.
+- E2: complete locally — fixed 208-byte ClientHello, two-second absolute budget, <=16,384-byte record, ServerHello framing and clean close. Four focused tests pass (healthy, closed, malformed/non-TLS/alert, timeout); production client remains disabled.
+- E3: complete locally — exact e6ea574 pin; native proofs 211/347/9 + hello30, 60 locked workspace tests, production feature/tree checks, Nix cargo-deny and Nix check pass. 10,000 handshakes pass (0 failures, 494.90s), image-static passes; healthy hardened 8099, 18/18 identical, interop 26 PASS + 2 client unsupported, reference removed. Stage17-method audit 736 lines / 409 functions vs 1,200 / 665, with explicit debug-companion limitation. Twenty mutants 20/20 caught, zero survivors/invalid, all actual failed-test evidence, 17 intent kills.
+- E4: complete locally — canonical README rewritten, current checks and historical coverage clearly sourced/dated, limits retained; only README implementation changes. Separate README-only final commit follows E3.
+- Acceptance: all requested automated E gates PASS locally. Healthy hardened bertie-boundary left on 127.0.0.1:8099; reference removed. Manual browser and independent acceptance remain Andrew/Dudley’s.

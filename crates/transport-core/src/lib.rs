@@ -7,6 +7,7 @@ pub mod aead;
 pub mod record;
 pub mod app;
 pub mod io;
+pub mod hello;
 #[path = "../../http-subset/src/lib.rs"]
 pub mod http;
 use http::{parse_policy, Policy, Request, MAX_REQUEST};
