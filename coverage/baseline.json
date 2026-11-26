@@ -3,823 +3,1048 @@
     {
       "end_line": 43,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 27
+      "id": "http_subset::equal",
+      "inline_proof_sloc": 6,
+      "line": 27,
+      "sloc": 11,
+      "status": "proven"
     },
     {
       "end_line": 49,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 45
+      "id": "http_subset::lower",
+      "inline_proof_sloc": 1,
+      "line": 45,
+      "sloc": 4,
+      "status": "proven"
     },
     {
       "end_line": 67,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 51
+      "id": "http_subset::equal_header",
+      "inline_proof_sloc": 6,
+      "line": 51,
+      "sloc": 11,
+      "status": "proven"
     },
     {
       "end_line": 74,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 69
+      "id": "http_subset::is_path",
+      "inline_proof_sloc": 1,
+      "line": 69,
+      "sloc": 5,
+      "status": "proven"
     },
     {
       "end_line": 87,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 76
+      "id": "http_subset::scan_path",
+      "inline_proof_sloc": 5,
+      "line": 76,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 99,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 89
+      "id": "http_subset::scan_value",
+      "inline_proof_sloc": 4,
+      "line": 89,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 126,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 101
+      "id": "http_subset::prefix",
+      "inline_proof_sloc": 3,
+      "line": 101,
+      "sloc": 23,
+      "status": "proven"
     },
     {
       "end_line": 166,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 128
+      "id": "http_subset::headers",
+      "inline_proof_sloc": 13,
+      "line": 128,
+      "sloc": 26,
+      "status": "proven"
     },
     {
       "end_line": 191,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 168
+      "id": "http_subset::parse_stage11",
+      "inline_proof_sloc": 10,
+      "line": 168,
+      "sloc": 14,
+      "status": "proven"
     },
     {
       "end_line": 231,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 193
+      "id": "http_subset::raw_headers",
+      "inline_proof_sloc": 13,
+      "line": 193,
+      "sloc": 26,
+      "status": "proven"
     },
     {
       "end_line": 256,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 233
+      "id": "http_subset::parse_raw",
+      "inline_proof_sloc": 10,
+      "line": 233,
+      "sloc": 14,
+      "status": "proven"
     },
     {
       "end_line": 268,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 266
+      "id": "http_subset::Policy::builtin",
+      "inline_proof_sloc": 1,
+      "line": 266,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 270,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 269
+      "id": "http_subset::Policy::is_strict",
+      "inline_proof_sloc": 0,
+      "line": 269,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 287,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 280
+      "id": "http_subset::drop_header",
+      "inline_proof_sloc": 1,
+      "line": 280,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 294,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 289
+      "id": "http_subset::is_token",
+      "inline_proof_sloc": 0,
+      "line": 289,
+      "sloc": 6,
+      "status": "proven"
     },
     {
       "end_line": 306,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 296
+      "id": "http_subset::scan_name",
+      "inline_proof_sloc": 4,
+      "line": 296,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 355,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 308
+      "id": "http_subset::classify",
+      "inline_proof_sloc": 0,
+      "line": 308,
+      "sloc": 48,
+      "status": "proven"
     },
     {
       "end_line": 368,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 357
+      "id": "http_subset::raw_prefix",
+      "inline_proof_sloc": 4,
+      "line": 357,
+      "sloc": 8,
+      "status": "proven"
     },
     {
       "end_line": 392,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 370
+      "id": "http_subset::check",
+      "inline_proof_sloc": 8,
+      "line": 370,
+      "sloc": 15,
+      "status": "proven"
     },
     {
       "end_line": 411,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 394
+      "id": "http_subset::parse_policy",
+      "inline_proof_sloc": 7,
+      "line": 394,
+      "sloc": 11,
+      "status": "proven"
     },
     {
       "end_line": 418,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 412
+      "id": "http_subset::parse",
+      "inline_proof_sloc": 5,
+      "line": 412,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 420,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 420
+      "id": "http_subset::whitespace",
+      "inline_proof_sloc": 0,
+      "line": 420,
+      "sloc": 1,
+      "status": "unverified"
     },
     {
       "end_line": 442,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 421
+      "id": "http_subset::words",
+      "inline_proof_sloc": 6,
+      "line": 421,
+      "sloc": 16,
+      "status": "proven"
     },
     {
       "end_line": 447,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 443
+      "id": "http_subset::action",
+      "inline_proof_sloc": 0,
+      "line": 443,
+      "sloc": 5,
+      "status": "tested"
     },
     {
       "end_line": 464,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 448
+      "id": "http_subset::number",
+      "inline_proof_sloc": 2,
+      "line": 448,
+      "sloc": 15,
+      "status": "proven"
     },
     {
       "end_line": 520,
       "file": "crates/http-subset/src/lib.rs",
-      "line": 465
+      "id": "http_subset::parse_config",
+      "inline_proof_sloc": 7,
+      "line": 465,
+      "sloc": 49,
+      "status": "proven"
     },
     {
       "end_line": 30,
       "file": "crates/transport-core/src/aead.rs",
-      "line": 10
+      "id": "transport_core::aead::nonce",
+      "inline_proof_sloc": 8,
+      "line": 10,
+      "sloc": 13,
+      "status": "proven"
     },
     {
       "end_line": 38,
       "file": "crates/transport-core/src/aead.rs",
-      "line": 31
+      "id": "transport_core::aead::sealed_len",
+      "inline_proof_sloc": 4,
+      "line": 31,
+      "sloc": 4,
+      "status": "proven"
     },
     {
       "end_line": 46,
       "file": "crates/transport-core/src/aead.rs",
-      "line": 39
+      "id": "transport_core::aead::plaintext_len",
+      "inline_proof_sloc": 4,
+      "line": 39,
+      "sloc": 4,
+      "status": "proven"
     },
     {
       "end_line": 64,
       "file": "crates/transport-core/src/aead.rs",
-      "line": 49
+      "id": "transport_core::aead::release",
+      "inline_proof_sloc": 8,
+      "line": 49,
+      "sloc": 8,
+      "status": "proven"
     },
     {
       "end_line": 27,
       "file": "crates/transport-core/src/app.rs",
-      "line": 12
+      "id": "transport_core::app::same",
+      "inline_proof_sloc": 5,
+      "line": 12,
+      "sloc": 11,
+      "status": "proven"
     },
     {
       "end_line": 38,
       "file": "crates/transport-core/src/app.rs",
-      "line": 28
+      "id": "transport_core::app::route",
+      "inline_proof_sloc": 6,
+      "line": 28,
+      "sloc": 5,
+      "status": "proven"
     },
     {
       "end_line": 42,
       "file": "crates/transport-core/src/app.rs",
-      "line": 40
+      "id": "transport_core::app::route_status",
+      "inline_proof_sloc": 0,
+      "line": 40,
+      "sloc": 3,
+      "status": "proven"
     },
     {
       "end_line": 46,
       "file": "crates/transport-core/src/app.rs",
-      "line": 44
+      "id": "transport_core::app::status_code",
+      "inline_proof_sloc": 0,
+      "line": 44,
+      "sloc": 3,
+      "status": "proven"
     },
     {
       "end_line": 68,
       "file": "crates/transport-core/src/app.rs",
-      "line": 50
+      "id": "transport_core::app::plan",
+      "inline_proof_sloc": 8,
+      "line": 50,
+      "sloc": 11,
+      "status": "proven"
     },
     {
       "end_line": 108,
       "file": "crates/transport-core/src/app.rs",
-      "line": 70
+      "id": "transport_core::app::task_response",
+      "inline_proof_sloc": 26,
+      "line": 70,
+      "sloc": 13,
+      "status": "proven"
     },
     {
       "end_line": 112,
       "file": "crates/transport-core/src/app.rs",
-      "line": 110
+      "id": "transport_core::app::is_safe",
+      "inline_proof_sloc": 0,
+      "line": 110,
+      "sloc": 3,
+      "status": "proven"
     },
     {
       "end_line": 134,
       "file": "crates/transport-core/src/app.rs",
-      "line": 114
+      "id": "transport_core::app::sanitize",
+      "inline_proof_sloc": 10,
+      "line": 114,
+      "sloc": 11,
+      "status": "proven"
     },
     {
       "end_line": 152,
       "file": "crates/transport-core/src/app.rs",
-      "line": 136
+      "id": "transport_core::app::scan_line",
+      "inline_proof_sloc": 7,
+      "line": 136,
+      "sloc": 10,
+      "status": "proven"
     },
     {
       "end_line": 171,
       "file": "crates/transport-core/src/app.rs",
-      "line": 154
+      "id": "transport_core::app::scan_colon",
+      "inline_proof_sloc": 8,
+      "line": 154,
+      "sloc": 10,
+      "status": "proven"
     },
     {
       "end_line": 204,
       "file": "crates/transport-core/src/app.rs",
-      "line": 175
+      "id": "transport_core::app::next_header_name",
+      "inline_proof_sloc": 15,
+      "line": 175,
+      "sloc": 15,
+      "status": "proven"
     },
     {
       "end_line": 241,
       "file": "crates/transport-core/src/app.rs",
-      "line": 212
+      "id": "transport_core::app::diagnose",
+      "inline_proof_sloc": 4,
+      "line": 212,
+      "sloc": 26,
+      "status": "proven"
     },
     {
       "end_line": 277,
       "file": "crates/transport-core/src/app.rs",
-      "line": 243
+      "id": "transport_core::app::diagnostic_line",
+      "inline_proof_sloc": 13,
+      "line": 243,
+      "sloc": 22,
+      "status": "proven"
     },
     {
       "end_line": 297,
       "file": "crates/transport-core/src/app.rs",
-      "line": 279
+      "id": "transport_core::app::lowercase",
+      "inline_proof_sloc": 7,
+      "line": 279,
+      "sloc": 12,
+      "status": "proven"
     },
     {
       "end_line": 311,
       "file": "crates/transport-core/src/app.rs",
-      "line": 299
+      "id": "transport_core::app::prune",
+      "inline_proof_sloc": 6,
+      "line": 299,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 318,
       "file": "crates/transport-core/src/app.rs",
-      "line": 316
+      "id": "transport_core::app::UnknownLog::new",
+      "inline_proof_sloc": 1,
+      "line": 316,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 346,
       "file": "crates/transport-core/src/app.rs",
-      "line": 319
+      "id": "transport_core::app::UnknownLog::should_log",
+      "inline_proof_sloc": 13,
+      "line": 319,
+      "sloc": 15,
+      "status": "proven"
     },
     {
       "end_line": 351,
       "file": "crates/transport-core/src/app.rs",
-      "line": 349
+      "id": "transport_core::app::needs_root",
+      "inline_proof_sloc": 0,
+      "line": 349,
+      "sloc": 3,
+      "status": "proven"
     },
     {
       "end_line": 364,
       "file": "crates/transport-core/src/app.rs",
-      "line": 352
+      "id": "transport_core::app::rejection_line",
+      "inline_proof_sloc": 5,
+      "line": 352,
+      "sloc": 8,
+      "status": "proven"
     },
     {
       "end_line": 385,
       "file": "crates/transport-core/src/app.rs",
-      "line": 365
+      "id": "transport_core::app::next_unknown",
+      "inline_proof_sloc": 7,
+      "line": 365,
+      "sloc": 14,
+      "status": "proven"
     },
     {
       "end_line": 407,
       "file": "crates/transport-core/src/app.rs",
-      "line": 386
+      "id": "transport_core::app::unknown_line",
+      "inline_proof_sloc": 10,
+      "line": 386,
+      "sloc": 12,
+      "status": "proven"
     },
     {
       "end_line": 24,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 21
+      "id": "transport_core::hello::word",
+      "inline_proof_sloc": 2,
+      "line": 21,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 35,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 27
+      "id": "transport_core::hello::vector",
+      "inline_proof_sloc": 3,
+      "line": 27,
+      "sloc": 6,
+      "status": "proven"
     },
     {
       "end_line": 57,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 37
+      "id": "transport_core::hello::layout",
+      "inline_proof_sloc": 3,
+      "line": 37,
+      "sloc": 18,
+      "status": "proven"
     },
     {
       "end_line": 72,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 60
+      "id": "transport_core::hello::extensions",
+      "inline_proof_sloc": 3,
+      "line": 60,
+      "sloc": 10,
+      "status": "proven"
     },
     {
       "end_line": 76,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 74
+      "id": "transport_core::hello::contains",
+      "inline_proof_sloc": 1,
+      "line": 74,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 87,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 78
+      "id": "transport_core::hello::contains_at",
+      "inline_proof_sloc": 5,
+      "line": 78,
+      "sloc": 5,
+      "status": "proven"
     },
     {
       "end_line": 98,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 89
+      "id": "transport_core::hello::find",
+      "inline_proof_sloc": 4,
+      "line": 89,
+      "sloc": 6,
+      "status": "proven"
     },
     {
       "end_line": 124,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 100
+      "id": "transport_core::hello::words",
+      "inline_proof_sloc": 8,
+      "line": 100,
+      "sloc": 17,
+      "status": "proven"
     },
     {
       "end_line": 137,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 126
+      "id": "transport_core::hello::list",
+      "inline_proof_sloc": 5,
+      "line": 126,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 150,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 139
+      "id": "transport_core::hello::shares",
+      "inline_proof_sloc": 3,
+      "line": 139,
+      "sloc": 9,
+      "status": "proven"
     },
     {
       "end_line": 160,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 152
+      "id": "transport_core::hello::has_share",
+      "inline_proof_sloc": 2,
+      "line": 152,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 183,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 162
+      "id": "transport_core::hello::choose",
+      "inline_proof_sloc": 6,
+      "line": 162,
+      "sloc": 16,
+      "status": "proven"
     },
     {
       "end_line": 203,
       "file": "crates/transport-core/src/hello.rs",
-      "line": 185
+      "id": "transport_core::hello::server_name",
+      "inline_proof_sloc": 4,
+      "line": 185,
+      "sloc": 14,
+      "status": "proven"
     },
     {
       "end_line": 38,
       "file": "crates/transport-core/src/io.rs",
-      "line": 16
+      "id": "transport_core::io::read_timeout",
+      "inline_proof_sloc": 11,
+      "line": 16,
+      "sloc": 12,
+      "status": "proven"
     },
     {
       "end_line": 59,
       "file": "crates/transport-core/src/io.rs",
-      "line": 44
+      "id": "transport_core::io::classify",
+      "inline_proof_sloc": 6,
+      "line": 44,
+      "sloc": 10,
+      "status": "proven"
     },
     {
       "end_line": 66,
       "file": "crates/transport-core/src/io.rs",
-      "line": 61
+      "id": "transport_core::io::admit",
+      "inline_proof_sloc": 2,
+      "line": 61,
+      "sloc": 4,
+      "status": "hazard"
     },
     {
       "end_line": 71,
       "file": "crates/transport-core/src/io.rs",
-      "line": 67
+      "id": "transport_core::io::release",
+      "inline_proof_sloc": 1,
+      "line": 67,
+      "sloc": 4,
+      "status": "proven"
     },
     {
       "end_line": 129,
       "file": "crates/transport-core/src/io.rs",
-      "line": 73
+      "id": "transport_core::io::parse_port",
+      "inline_proof_sloc": 35,
+      "line": 73,
+      "sloc": 22,
+      "status": "proven"
     },
     {
       "end_line": 32,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 30
+      "id": "transport_core::Machine::new",
+      "inline_proof_sloc": 1,
+      "line": 30,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 36,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 33
+      "id": "transport_core::Machine::with_policy",
+      "inline_proof_sloc": 2,
+      "line": 33,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 37,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 37
+      "id": "transport_core::Machine::bytes",
+      "inline_proof_sloc": 0,
+      "line": 37,
+      "sloc": 1,
+      "status": "proven"
     },
     {
       "end_line": 38,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 38
+      "id": "transport_core::Machine::terminal",
+      "inline_proof_sloc": 0,
+      "line": 38,
+      "sloc": 1,
+      "status": "proven"
     },
     {
       "end_line": 39,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 39
+      "id": "transport_core::Machine::steps",
+      "inline_proof_sloc": 0,
+      "line": 39,
+      "sloc": 1,
+      "status": "proven"
     },
     {
       "end_line": 102,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 41
+      "id": "transport_core::Machine::step",
+      "inline_proof_sloc": 27,
+      "line": 41,
+      "sloc": 34,
+      "status": "proven"
     },
     {
       "end_line": 116,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 105
+      "id": "transport_core::append",
+      "inline_proof_sloc": 6,
+      "line": 105,
+      "sloc": 6,
+      "status": "proven"
     },
     {
       "end_line": 129,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 117
+      "id": "transport_core::complete",
+      "inline_proof_sloc": 3,
+      "line": 117,
+      "sloc": 10,
+      "status": "proven"
     },
     {
       "end_line": 145,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 134
+      "id": "transport_core::decimal",
+      "inline_proof_sloc": 6,
+      "line": 134,
+      "sloc": 6,
+      "status": "proven"
     },
     {
       "end_line": 177,
       "file": "crates/transport-core/src/lib.rs",
-      "line": 148
+      "id": "transport_core::response",
+      "inline_proof_sloc": 12,
+      "line": 148,
+      "sloc": 18,
+      "status": "proven"
     },
     {
       "end_line": 45,
       "file": "crates/transport-core/src/record.rs",
-      "line": 14
+      "id": "transport_core::record::unpad",
+      "inline_proof_sloc": 16,
+      "line": 14,
+      "sloc": 16,
+      "status": "proven"
     },
     {
       "end_line": 56,
       "file": "crates/transport-core/src/record.rs",
-      "line": 47
+      "id": "transport_core::record::aad",
+      "inline_proof_sloc": 3,
+      "line": 47,
+      "sloc": 7,
+      "status": "proven"
     },
     {
       "end_line": 75,
       "file": "crates/transport-core/src/record.rs",
-      "line": 58
+      "id": "transport_core::record::inner_plaintext",
+      "inline_proof_sloc": 8,
+      "line": 58,
+      "sloc": 10,
+      "status": "proven"
     },
     {
       "end_line": 81,
       "file": "crates/transport-core/src/record.rs",
-      "line": 76
+      "id": "transport_core::record::encrypted_payload_len",
+      "inline_proof_sloc": 2,
+      "line": 76,
+      "sloc": 4,
+      "status": "proven"
     },
     {
       "end_line": 95,
       "file": "crates/transport-core/src/record.rs",
-      "line": 82
+      "id": "transport_core::record::x25519_peer",
+      "inline_proof_sloc": 5,
+      "line": 82,
+      "sloc": 9,
+      "status": "proven"
     },
     {
       "end_line": 98,
       "file": "crates/transport-core/src/record.rs",
-      "line": 96
+      "id": "transport_core::record::p256_point_shape",
+      "inline_proof_sloc": 1,
+      "line": 96,
+      "sloc": 2,
+      "status": "proven"
     },
     {
       "end_line": 111,
       "file": "crates/transport-core/src/record.rs",
-      "line": 99
+      "id": "transport_core::record::offers",
+      "inline_proof_sloc": 3,
+      "line": 99,
+      "sloc": 10,
+      "status": "proven"
     },
     {
       "end_line": 27,
       "file": "src/lib.rs",
-      "line": 25
+      "id": "scratch_server::DefaultforServerState::default",
+      "inline_proof_sloc": 0,
+      "line": 25,
+      "sloc": 3,
+      "status": "tested"
     },
     {
       "end_line": 37,
       "file": "src/lib.rs",
-      "line": 30
+      "id": "scratch_server::ServerState::with_policy",
+      "inline_proof_sloc": 0,
+      "line": 30,
+      "sloc": 8,
+      "status": "tested"
     },
     {
       "end_line": 55,
       "file": "src/lib.rs",
-      "line": 39
+      "id": "scratch_server::log_unknown",
+      "inline_proof_sloc": 0,
+      "line": 39,
+      "sloc": 17,
+      "status": "unverified"
     },
     {
       "end_line": 61,
       "file": "src/lib.rs",
-      "line": 56
+      "id": "scratch_server::reply",
+      "inline_proof_sloc": 0,
+      "line": 56,
+      "sloc": 6,
+      "status": "tested"
     },
     {
       "end_line": 77,
       "file": "src/lib.rs",
-      "line": 62
+      "id": "scratch_server::root_body",
+      "inline_proof_sloc": 0,
+      "line": 62,
+      "sloc": 16,
+      "status": "unverified"
     },
     {
       "end_line": 82,
       "file": "src/lib.rs",
-      "line": 79
+      "id": "scratch_server::serve_connection",
+      "inline_proof_sloc": 0,
+      "line": 79,
+      "sloc": 3,
+      "status": "tested"
     },
     {
       "end_line": 134,
       "file": "src/lib.rs",
-      "line": 83
+      "id": "scratch_server::serve_with_started",
+      "inline_proof_sloc": 0,
+      "line": 83,
+      "sloc": 52,
+      "status": "unverified"
     },
     {
       "end_line": 147,
       "file": "src/lib.rs",
-      "line": 137
+      "id": "scratch_server::read_result",
+      "inline_proof_sloc": 0,
+      "line": 137,
+      "sloc": 11,
+      "status": "tested"
     },
     {
       "end_line": 19,
       "file": "src/main.rs",
-      "line": 15
+      "id": "scratch_server::port",
+      "inline_proof_sloc": 0,
+      "line": 15,
+      "sloc": 5,
+      "status": "tested"
     },
     {
       "end_line": 32,
       "file": "src/main.rs",
-      "line": 21
+      "id": "scratch_server::main",
+      "inline_proof_sloc": 0,
+      "line": 21,
+      "sloc": 12,
+      "status": "unverified"
     },
     {
       "end_line": 113,
       "file": "src/main.rs",
-      "line": 34
+      "id": "scratch_server::run",
+      "inline_proof_sloc": 0,
+      "line": 34,
+      "sloc": 79,
+      "status": "hazard"
     },
     {
       "end_line": 125,
       "file": "src/main.rs",
-      "line": 115
-    },
-    {
-      "end_line": 9,
-      "file": "src/record_tests.rs",
-      "line": 4
-    },
-    {
-      "end_line": 23,
-      "file": "src/record_tests.rs",
-      "line": 11
+      "id": "scratch_server::healthcheck",
+      "inline_proof_sloc": 0,
+      "line": 115,
+      "sloc": 10,
+      "status": "tested"
     },
     {
       "end_line": 26,
       "file": "src/tls.rs",
-      "line": 18
+      "id": "scratch_server::tls::load_config",
+      "inline_proof_sloc": 0,
+      "line": 18,
+      "sloc": 9,
+      "status": "unverified"
     },
     {
       "end_line": 35,
       "file": "src/tls.rs",
-      "line": 28
+      "id": "scratch_server::tls::load_certificate",
+      "inline_proof_sloc": 0,
+      "line": 28,
+      "sloc": 8,
+      "status": "unverified"
     },
     {
       "end_line": 39,
       "file": "src/tls.rs",
-      "line": 37
+      "id": "scratch_server::tls::invalid",
+      "inline_proof_sloc": 0,
+      "line": 37,
+      "sloc": 3,
+      "status": "tested"
     },
     {
       "end_line": 56,
       "file": "src/tls.rs",
-      "line": 41
+      "id": "scratch_server::tls::algorithms",
+      "inline_proof_sloc": 0,
+      "line": 41,
+      "sloc": 16,
+      "status": "unverified"
     },
     {
       "end_line": 73,
       "file": "src/tls.rs",
-      "line": 58
+      "id": "scratch_server::tls::read_record",
+      "inline_proof_sloc": 0,
+      "line": 58,
+      "sloc": 16,
+      "status": "unverified"
     },
     {
       "end_line": 124,
       "file": "src/tls.rs",
-      "line": 82
+      "id": "scratch_server::tls::<S:Read+Write>BertieStream<S>::accept",
+      "inline_proof_sloc": 0,
+      "line": 82,
+      "sloc": 42,
+      "status": "tested"
     },
     {
       "end_line": 133,
       "file": "src/tls.rs",
-      "line": 126
+      "id": "scratch_server::tls::<S:Read+Write>BertieStream<S>::close_notify",
+      "inline_proof_sloc": 0,
+      "line": 126,
+      "sloc": 8,
+      "status": "unverified"
     },
     {
       "end_line": 159,
       "file": "src/tls.rs",
-      "line": 136
+      "id": "scratch_server::tls::<S:Read+Write>ReadforBertieStream<S>::read",
+      "inline_proof_sloc": 0,
+      "line": 136,
+      "sloc": 24,
+      "status": "tested"
     },
     {
       "end_line": 174,
       "file": "src/tls.rs",
-      "line": 162
+      "id": "scratch_server::tls::<S:Read+Write>WriteforBertieStream<S>::write",
+      "inline_proof_sloc": 0,
+      "line": 162,
+      "sloc": 13,
+      "status": "tested"
     },
     {
       "end_line": 177,
       "file": "src/tls.rs",
-      "line": 175
+      "id": "scratch_server::tls::<S:Read+Write>WriteforBertieStream<S>::flush",
+      "inline_proof_sloc": 0,
+      "line": 175,
+      "sloc": 3,
+      "status": "tested"
     },
     {
       "end_line": 227,
       "file": "src/tls.rs",
-      "line": 199
+      "id": "scratch_server::tls::healthcheck",
+      "inline_proof_sloc": 0,
+      "line": 199,
+      "sloc": 27,
+      "status": "tested"
     },
     {
       "end_line": 246,
       "file": "src/tls.rs",
-      "line": 229
-    },
-    {
-      "end_line": 33,
-      "file": "src/tls_test_provider.rs",
-      "line": 22
-    },
-    {
-      "end_line": 51,
-      "file": "src/tls_test_provider.rs",
-      "line": 49
-    },
-    {
-      "end_line": 59,
-      "file": "src/tls_test_provider.rs",
-      "line": 55
-    },
-    {
-      "end_line": 64,
-      "file": "src/tls_test_provider.rs",
-      "line": 60
-    },
-    {
-      "end_line": 67,
-      "file": "src/tls_test_provider.rs",
-      "line": 65
-    },
-    {
-      "end_line": 77,
-      "file": "src/tls_test_provider.rs",
-      "line": 75
-    },
-    {
-      "end_line": 80,
-      "file": "src/tls_test_provider.rs",
-      "line": 78
-    },
-    {
-      "end_line": 83,
-      "file": "src/tls_test_provider.rs",
-      "line": 81
-    },
-    {
-      "end_line": 86,
-      "file": "src/tls_test_provider.rs",
-      "line": 84
-    },
-    {
-      "end_line": 93,
-      "file": "src/tls_test_provider.rs",
-      "line": 89
-    },
-    {
-      "end_line": 96,
-      "file": "src/tls_test_provider.rs",
-      "line": 94
-    },
-    {
-      "end_line": 99,
-      "file": "src/tls_test_provider.rs",
-      "line": 97
-    },
-    {
-      "end_line": 102,
-      "file": "src/tls_test_provider.rs",
-      "line": 100
-    },
-    {
-      "end_line": 110,
-      "file": "src/tls_test_provider.rs",
-      "line": 108
-    },
-    {
-      "end_line": 122,
-      "file": "src/tls_test_provider.rs",
-      "line": 111
-    },
-    {
-      "end_line": 125,
-      "file": "src/tls_test_provider.rs",
-      "line": 123
-    },
-    {
-      "end_line": 130,
-      "file": "src/tls_test_provider.rs",
-      "line": 126
-    },
-    {
-      "end_line": 141,
-      "file": "src/tls_test_provider.rs",
-      "line": 133
-    },
-    {
-      "end_line": 147,
-      "file": "src/tls_test_provider.rs",
-      "line": 142
-    },
-    {
-      "end_line": 150,
-      "file": "src/tls_test_provider.rs",
-      "line": 148
-    },
-    {
-      "end_line": 167,
-      "file": "src/tls_test_provider.rs",
-      "line": 160
-    },
-    {
-      "end_line": 170,
-      "file": "src/tls_test_provider.rs",
-      "line": 168
-    },
-    {
-      "end_line": 179,
-      "file": "src/tls_test_provider.rs",
-      "line": 173
-    },
-    {
-      "end_line": 182,
-      "file": "src/tls_test_provider.rs",
-      "line": 180
-    },
-    {
-      "end_line": 185,
-      "file": "src/tls_test_provider.rs",
-      "line": 183
-    },
-    {
-      "end_line": 196,
-      "file": "src/tls_test_provider.rs",
-      "line": 194
-    },
-    {
-      "end_line": 199,
-      "file": "src/tls_test_provider.rs",
-      "line": 197
-    },
-    {
-      "end_line": 202,
-      "file": "src/tls_test_provider.rs",
-      "line": 200
-    },
-    {
-      "end_line": 209,
-      "file": "src/tls_test_provider.rs",
-      "line": 203
-    },
-    {
-      "end_line": 245,
-      "file": "src/tls_test_provider.rs",
-      "line": 212
-    },
-    {
-      "end_line": 248,
-      "file": "src/tls_test_provider.rs",
-      "line": 246
-    },
-    {
-      "end_line": 277,
-      "file": "src/tls_test_provider.rs",
-      "line": 251
-    },
-    {
-      "end_line": 294,
-      "file": "src/tls_test_provider.rs",
-      "line": 281
-    },
-    {
-      "end_line": 301,
-      "file": "src/tls_test_provider.rs",
-      "line": 299
-    },
-    {
-      "end_line": 304,
-      "file": "src/tls_test_provider.rs",
-      "line": 302
-    },
-    {
-      "end_line": 329,
-      "file": "src/tls_test_provider.rs",
-      "line": 305
-    },
-    {
-      "end_line": 341,
-      "file": "src/tls_test_provider.rs",
-      "line": 339
-    },
-    {
-      "end_line": 374,
-      "file": "src/tls_test_provider.rs",
-      "line": 344
-    },
-    {
-      "end_line": 380,
-      "file": "src/tls_test_provider.rs",
-      "line": 378
-    },
-    {
-      "end_line": 387,
-      "file": "src/tls_test_provider.rs",
-      "line": 383
-    },
-    {
-      "end_line": 390,
-      "file": "src/tls_test_provider.rs",
-      "line": 388
-    },
-    {
-      "end_line": 393,
-      "file": "src/tls_test_provider.rs",
-      "line": 391
-    },
-    {
-      "end_line": 398,
-      "file": "src/tls_test_provider.rs",
-      "line": 396
-    },
-    {
-      "end_line": 411,
-      "file": "src/tls_test_provider.rs",
-      "line": 399
-    },
-    {
-      "end_line": 421,
-      "file": "src/tls_test_provider.rs",
-      "line": 414
-    },
-    {
-      "end_line": 435,
-      "file": "src/tls_test_provider.rs",
-      "line": 423
+      "id": "scratch_server::tls::healthcheck_read",
+      "inline_proof_sloc": 0,
+      "line": 229,
+      "sloc": 18,
+      "status": "unverified"
     },
     {
       "end_line": 30,
       "file": "src/transport.rs",
-      "line": 23
+      "id": "scratch_server::transport::ReadforDeadlineSocket::read",
+      "inline_proof_sloc": 0,
+      "line": 23,
+      "sloc": 8,
+      "status": "tested"
     },
     {
       "end_line": 36,
       "file": "src/transport.rs",
-      "line": 34
+      "id": "scratch_server::transport::WriteforDeadlineSocket::write",
+      "inline_proof_sloc": 0,
+      "line": 34,
+      "sloc": 3,
+      "status": "tested"
     },
     {
       "end_line": 39,
       "file": "src/transport.rs",
-      "line": 37
+      "id": "scratch_server::transport::WriteforDeadlineSocket::flush",
+      "inline_proof_sloc": 0,
+      "line": 37,
+      "sloc": 3,
+      "status": "tested"
     },
     {
       "end_line": 81,
       "file": "src/transport.rs",
-      "line": 42
+      "id": "scratch_server::transport::serve_tcp",
+      "inline_proof_sloc": 0,
+      "line": 42,
+      "sloc": 38,
+      "status": "tested"
     },
     {
       "end_line": 91,
       "file": "src/transport.rs",
-      "line": 84
+      "id": "scratch_server::transport::elapsed_ns",
+      "inline_proof_sloc": 0,
+      "line": 84,
+      "sloc": 8,
+      "status": "unverified"
     }
   ],
+  "proof_depth": {
+    "functional": 0,
+    "functional_own_code_only": 0,
+    "safety_only": 887
+  },
   "proof_ratio": 6.400225479143179,
   "proof_sloc": 5677,
   "proven": 887,
-  "schema": 1,
+  "schema": 2,
   "scope": "first-party security runtime",
   "statuses": {
     "hazard": 83,
@@ -827,11 +1052,11 @@
     "proven-bounded": 0,
     "proven-extracted": 0,
     "proven-upstream": 0,
-    "tested": 373,
+    "tested": 215,
     "trusted": 0,
-    "unverified": 367
+    "unverified": 181
   },
-  "tested": 373,
-  "total": 1710,
-  "unverified": 450
+  "tested": 215,
+  "total": 1366,
+  "unverified": 264
 }

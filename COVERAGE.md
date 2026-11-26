@@ -1,20 +1,43 @@
 # scratch-server coverage
 
-Measured with formal-coverage v1.9.0, public kit commit
-`2c7e26a8c90afb44323ecebce69822e8b4bc9ca5`, using the four complete Verus
+Measured with formal-coverage v1.12.4, public kit commit
+`04bfae9bdeef910980313061b8c8b425c1efb563`, using the four complete Verus
 roots in `verification/verify.sh`. Receipts are caller-supplied source-bound
 execution records, not authenticated attestations. Overlapping roots are unioned.
 Tests are syntactic references, not executed line coverage.
+
+## v1.12.4 adoption (from v1.9.0)
+
+CI now enforces the coverage ratchet (`enforce-ratchet: 'true'`). The ratchet
+compares each change against the committed `coverage/baseline.json`.
+
+The numbers moved because the measurement was corrected. No proofs were
+added. v1.12.4 follows `#[cfg(test)] #[path = ...]` modules, so 48
+test-only units (344 lines) in `src/tls_test_provider.rs` and
+`src/record_tests.rs` now count as test code instead of security runtime:
+
+| | proven | tested | unverified | total | proven share |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| v1.9.0 | 887 | 373 | 450 | 1710 | 51.87% |
+| v1.12.4 | 887 | 215 | 264 | 1366 | 64.93% |
+
+Of the 344 lines, 158 were tested and 186 unverified. No other unit changed
+classification, and proven lines are unchanged.
+
+The proof-depth table below is new in the kit. The kit reads contract depth
+only from F* postconditions, so it lists every Verus-proven line as
+safety-only. It does not read the Verus `ensures` clauses. This is the kit's
+conservative default, not an assessment of these proofs.
 
 <!-- measured coverage: begin -->
 
 | Security runtime | Lines | Share |
 | --- | ---: | ---: |
-| proven | 887 | 51.87% |
-| tested | 373 | 21.81% |
-| unverified | 450 | 26.32% |
+| proven | 887 | 64.93% |
+| tested | 215 | 15.74% |
+| unverified | 264 | 19.33% |
 
-Total: **1710** first-party security runtime SLoC. Proven includes explicitly labelled
+Total: **1366** first-party security runtime SLoC. Proven includes explicitly labelled
 `proven-extracted` hax credit (0 lines); Verus proven: 887 lines.
 
 Proof-to-code ratio: **6.40** (5677 proof SLoC / 887 proven + proven-extracted runtime SLoC); informational, never blocking.
@@ -78,6 +101,16 @@ Proof components: 0 hax annotation SLoC, 0 standalone `cfg(hax)` proof-code SLoC
 | transport_core::spec::hello | 0 | 122 | n/a |
 | transport_core::spec::io | 0 | 55 | n/a |
 | transport_core::spec::record | 0 | 3 | n/a |
+
+### Proof depth
+
+| Contract depth | Lines | Share of proven lines |
+| --- | ---: | ---: |
+| safety-only | 887 | 100.00% |
+| functional, checked only against own code | 0 | 0.00% |
+| functional | 0 | 0.00% |
+
+Safety-only means proven free of panics, overflows and out-of-bounds access, including length and range facts; it says nothing about what the code computes.
 
 <!-- measured coverage: end -->
 
