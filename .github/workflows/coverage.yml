@@ -26,8 +26,9 @@ jobs:
         run: |
           mkdir -p logs
           ./verification/verify.sh > logs/proofs.log 2>&1 || { tail -n 40 logs/proofs.log; exit 1; }
-      - uses: gumshoe2020/formal-coverage/.github/actions/coverage@2c7e26a8c90afb44323ecebce69822e8b4bc9ca5
+      - uses: gumshoe2020/formal-coverage/.github/actions/coverage@04bfae9bdeef910980313061b8c8b425c1efb563 # v1.12.4
         with:
+          enforce-ratchet: 'true'
           workspace: '.'
           report-args: '["--verus-log", "logs/verus-http-subset-lib.log", "--verus-log", "logs/verus-transport-core-lib.log", "--verus-log", "logs/verus-transport-core-aead.log", "--verus-log", "logs/verus-transport-core-hello.log"]'
           baseline: coverage/baseline.json
@@ -42,7 +43,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: gumshoe2020/formal-coverage/.github/actions/publish-badges@2c7e26a8c90afb44323ecebce69822e8b4bc9ca5
+      - uses: gumshoe2020/formal-coverage/.github/actions/publish-badges@04bfae9bdeef910980313061b8c8b425c1efb563 # v1.12.4
         with:
           artifact-name: coverage-badges
           coverage-result: ${{ needs.coverage.result }}
