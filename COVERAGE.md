@@ -10,11 +10,11 @@ Tests are syntactic references, not executed line coverage.
 
 | Security runtime | Lines | Share |
 | --- | ---: | ---: |
-| proven | 887 | 51.87% |
-| tested | 373 | 21.81% |
-| unverified | 450 | 26.32% |
+| proven | 887 | 64.93% |
+| tested | 215 | 15.74% |
+| unverified | 264 | 19.33% |
 
-Total: **1710** first-party security runtime SLoC. Proven includes explicitly labelled
+Total: **1366** first-party security runtime SLoC. Proven includes explicitly labelled
 `proven-extracted` hax credit (0 lines); Verus proven: 887 lines.
 
 Proof-to-code ratio: **6.40** (5677 proof SLoC / 887 proven + proven-extracted runtime SLoC); informational, never blocking.
@@ -78,6 +78,16 @@ Proof components: 0 hax annotation SLoC, 0 standalone `cfg(hax)` proof-code SLoC
 | transport_core::spec::hello | 0 | 122 | n/a |
 | transport_core::spec::io | 0 | 55 | n/a |
 | transport_core::spec::record | 0 | 3 | n/a |
+
+### Proof depth
+
+| Contract depth | Lines | Share of proven lines |
+| --- | ---: | ---: |
+| safety-only | 887 | 100.00% |
+| functional, checked only against own code | 0 | 0.00% |
+| functional | 0 | 0.00% |
+
+Safety-only means proven free of panics, overflows and out-of-bounds access, including length and range facts; it says nothing about what the code computes.
 
 <!-- measured coverage: end -->
 
