@@ -1,10 +1,33 @@
 # scratch-server coverage
 
-Measured with formal-coverage v1.9.0, public kit commit
-`2c7e26a8c90afb44323ecebce69822e8b4bc9ca5`, using the four complete Verus
+Measured with formal-coverage v1.12.4, public kit commit
+`04bfae9bdeef910980313061b8c8b425c1efb563`, using the four complete Verus
 roots in `verification/verify.sh`. Receipts are caller-supplied source-bound
 execution records, not authenticated attestations. Overlapping roots are unioned.
 Tests are syntactic references, not executed line coverage.
+
+## v1.12.4 adoption (from v1.9.0)
+
+CI now enforces the coverage ratchet (`enforce-ratchet: 'true'`). The ratchet
+compares each change against the committed `coverage/baseline.json`.
+
+The numbers moved because the measurement was corrected. No proofs were
+added. v1.12.4 follows `#[cfg(test)] #[path = ...]` modules, so 48
+test-only units (344 lines) in `src/tls_test_provider.rs` and
+`src/record_tests.rs` now count as test code instead of security runtime:
+
+| | proven | tested | unverified | total | proven share |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| v1.9.0 | 887 | 373 | 450 | 1710 | 51.87% |
+| v1.12.4 | 887 | 215 | 264 | 1366 | 64.93% |
+
+Of the 344 lines, 158 were tested and 186 unverified. No other unit changed
+classification, and proven lines are unchanged.
+
+The proof-depth table below is new in the kit. The kit reads contract depth
+only from F* postconditions, so it lists every Verus-proven line as
+safety-only. It does not read the Verus `ensures` clauses. This is the kit's
+conservative default, not an assessment of these proofs.
 
 <!-- measured coverage: begin -->
 
