@@ -12,7 +12,7 @@ members = ["crates/http-subset", "crates/transport-core"]
 transport-core = { version = "=0.1.0", path = "crates/transport-core" }
 http-subset = { version = "=0.1.0", path = "crates/http-subset" }
 
-bertie-tls = { version = "=0.1.0-pre.2", git = "https://github.com/gumshoe2020/bertie-tls", rev = "9b55643a3724bf347dd45e998844bf18776dfccd", default-features = false, features = ["api", "std", "defensive", "sha256", "sha384", "sha512", "chacha20poly1305", "ecdsa-p256", "x25519", "p256", "mlkem768"] }
+bertie-tls = { version = "=0.1.0-pre.2", git = "https://github.com/gumshoe2020/bertie-tls", rev = "380c23fbd2f96e22c73727538fa14b20c89b9a89", default-features = false, features = ["api", "std", "defensive", "sha256", "sha384", "sha512", "chacha20poly1305", "ecdsa-p256", "x25519", "p256", "mlkem768"] }
 rand = "0.9"
 p256 = { version = "0.14", features = ["pkcs8", "pem"] }
 pem-rfc7468 = { version = "0.7", features = ["alloc"] }
