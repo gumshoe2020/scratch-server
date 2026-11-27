@@ -1,7 +1,9 @@
 {
   description = "scratch-server: verified HTTP subset in a static shell-free Nix image";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  outputs = { self, nixpkgs }:
+  # formal-coverage v1.13.0.
+  inputs.formal-coverage.url = "github:gumshoe2020/formal-coverage/d440e293b7c43dcd0ef95ad2ceb6041ba62f04b2";
+  outputs = { self, nixpkgs, formal-coverage }:
     let
       systems = [ "aarch64-linux" "x86_64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
@@ -27,8 +29,7 @@
         # Network integration test uses loopback only; all tests run in the sandbox.
         doCheck = true;
       };
-    in {
-      packages = forAll (pkgs:
+      linuxPackages = forAll (pkgs:
         let
           mkImage = tag: server: pkgs.dockerTools.buildLayeredImage {
             name = "bertie-boundary";
@@ -56,6 +57,15 @@
           image-static = mkImage "static" server-static;
           verus = import ./nix/verus.nix { inherit pkgs; };
           default = image-static;
+        });
+    in {
+      packages = nixpkgs.lib.genAttrs (systems ++ [ "aarch64-darwin" ]) (system:
+        let
+          pkgs = formal-coverage.inputs.nixpkgs.legacyPackages.${system};
+          linux = linuxPackages.${system} or {};
+          verus = linux.verus or (import ./nix/verus-darwin.nix { inherit pkgs; });
+        in linux // {
+          coverage = pkgs.callPackage ./nix/coverage.nix { inherit formal-coverage verus; };
         });
 
       checks = forAll (pkgs:

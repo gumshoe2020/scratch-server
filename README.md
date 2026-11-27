@@ -100,3 +100,18 @@ proved (47.25%). That percentage describes the older source, not today's server.
 
 [Verification guide](verification/README.md) ·
 [Design history](EVOLUTION.md) · [Build records](dev/README.md)
+
+### Shipped tree coverage
+
+Run `nix build .#coverage` and open `result/report.md` or `result/report.json`.
+The flake pins formal-coverage v1.13.0.
+
+The informational Shipped tree counts runtime lines proven in their own package.
+The report credits bertie-tls at the server's locked revision and enabled features.
+Compiled dependency lines outside its receipt count as unverified. Cross-package
+interfaces are outside the proof claim. The ratchet still uses first-party totals.
+
+At the current lock on aarch64-darwin, the tree contains 302,681 lines.
+The receipt moves 1,151 lines to tested and 25 to trusted. Bertie's
+1,757 lines outside the receipt remain unverified. Both reports count
+887 proven lines, all first-party.
