@@ -1,8 +1,8 @@
 {
   description = "scratch-server: verified HTTP subset in a static shell-free Nix image";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  # Placeholder rev until formal-coverage v1.13.0 is published.
-  inputs.formal-coverage.url = "github:gumshoe2020/formal-coverage/0000000000000000000000000000000000000000";
+  # formal-coverage v1.13.0.
+  inputs.formal-coverage.url = "github:gumshoe2020/formal-coverage/d440e293b7c43dcd0ef95ad2ceb6041ba62f04b2";
   outputs = { self, nixpkgs, formal-coverage }:
     let
       systems = [ "aarch64-linux" "x86_64-linux" ];

@@ -104,9 +104,7 @@ proved (47.25%). That percentage describes the older source, not today's server.
 ### Shipped tree coverage
 
 Run `nix build .#coverage` and open `result/report.md` or `result/report.json`.
-Until v1.13.0 is published, replace the placeholder input at build time by adding
-`--no-write-lock-file --override-input formal-coverage "git+file://$FC_CHECKOUT"`,
-where `FC_CHECKOUT` is the absolute path to the part-1 checkout.
+The flake pins formal-coverage v1.13.0.
 
 The informational Shipped tree counts runtime lines proven in their own package.
 The report credits bertie-tls at the server's locked revision and enabled features.
