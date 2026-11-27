@@ -8,21 +8,14 @@ let
   locked = lib.findSingle (p: p.name == "bertie-tls") null null lock.package;
   rev = lib.last (lib.splitString "#" locked.source);
   src = builtins.fetchGit { url = dep.git; inherit rev; submodules = true; };
-  config = pkgs.writeText "bertie-coverage.toml" ''
-    [fstar.proof]
-    models = ["proofs/fstar/libcrux-models/*.fsti"]
-    [ship]
-    packages = ["bertie-tls"]
-    reason = "Measure the library features enabled by scratch-server."
-  '';
   receipt = formal-coverage.lib.${system}.coverageTotals ({
-    inherit src rev config;
+    inherit src rev;
     package = locked.name;
     url = dep.git;
     features = dep.features ++ lib.optional (dep.default-features or true) "default";
     cargoHash = "sha256-a1xBSkY5iNzsWEbWjqyz6AVjXeRivbHKQvShzcP2zzo=";
-    # This locked revision predates verify-fstar.py. Supply no proof evidence.
-    verify = "test ! -e scripts/verify-fstar.py && echo 'No F* verification script at locked revision'";
+    verify = "python3 scripts/verify-fstar.py";
+    reportArgs = [ "--fstar-log" "target/ci-logs/fstar/fstar.log" ];
   } // receiptArgs);
   source = lib.fileset.toSource {
     root = ../.;
@@ -53,6 +46,7 @@ in pkgs.runCommand "scratch-server-coverage" {
   export HOME=$TMPDIR/home CARGO_HOME=$TMPDIR/cargo-home
   mkdir -p "$HOME" "$CARGO_HOME" "$out"
   substitute ${vendor}/.cargo/config.toml "$CARGO_HOME/config.toml" --replace-fail '"cargo-vendor-dir"' '"${vendor}"'
+  ${lib.optionalString withReceipt ''test "$(cat ${receipt}/verify.exit)" = 0''}
   cp -R ${proofLogs} logs
   formal-coverage report . \
     --verus-log logs/verus-http-subset-lib.log \

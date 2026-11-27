@@ -680,3 +680,64 @@ server, source/build requirements, dated assurance evidence and limits; stage
 narratives stay here and in the linked records. E4 changes only README; E3 records
 and code are committed separately. No push or GitHub action. E2 a923749; E3 and
 README-only final revisions follow in git log.
+
+## Results — 2026-11-26 (bertie-tls 380c23f)
+
+Andrew approved moving the bertie-tls pin from `9b55643a3724bf347dd45e998844bf18776dfccd`
+to bertie-tls main `380c23fbd2f96e22c73727538fa14b20c89b9a89`, so the Shipped tree
+credits Bertie's F* proofs. The version requirement and the eleven enabled features are
+unchanged; no feature was renamed. Bertie's own Cargo.lock is byte-identical at both
+revisions (blob `90a5f9380702f9f054614b4ff996afb667653cf2`). scratch-server's Cargo.lock
+changes only the bertie-tls source line. No scratch-server code changed: the API this
+server uses compiles unchanged. These are Codex and Claude Code runs on one arm64 Mac,
+loopback only. Independent acceptance remains Andrew/Dudley's.
+
+| Check | 380c23f result |
+|---|---|
+| Workspace tests (`--locked --no-fail-fast`) | PASS: 60 passed, zero failed, 1 ignored (strict detector, run separately) |
+| Native Verus | PASS: 211/347/9 plus standalone hello 30, zero errors (overlapping roots) |
+| Hax / strict F* | PASS: all seven stage-19 checks exit 0 on a fresh 380c23f extraction (see below) |
+| Mutants | PASS: 20/20 caught, zero survivors or invalid runs; all twenty failed tests, 17 intent kills (`logs/stage19-mutants/results.json`, ignored) |
+| Strict native handshakes | PASS: 10,000 attempted, zero failed |
+| HTTP equivalence | PASS: 18/18 byte-identical against the same scratch-server source on the 9b55643 pin |
+| Interop | PASS: 26 passing rows and the same 2 local client-unsupported cases as E |
+| Nix coverage | PASS: receipt built at 380c23f, Bertie F* verification exit 0; first-party numbers unchanged |
+| Not rerun | Nix flake check, static image, container, cargo-deny, in-binary audit, browsers |
+
+F* checks: the historical stage19d/19e extractors hard-code Bertie revisions e1af495
+and e6ea574. They were rerun against 380c23f with the same F* invocations, the new
+`Bertie_tls` module prefix and fresh include directories. The extraction now has 37
+files (18 implementations, 19 interfaces) instead of 21; the crypto backend stays
+interface-only. Der, Tls13crypto.fsti, Tls13formats, Tls13api, Tls13handshake and both
+key schedulers each exit 0, with no proof cache or lax options. The checks still assume
+the abstract crypto models; they do not prove libcrux or an end-to-end TLS theorem.
+
+HTTP equivalence: against the historical `proven-io:static` image, 16 of 18 cases
+are byte-identical. GET / and HEAD / differ (Content-Length 125 versus 65), and the
+base branch on the 9b55643 pin shows the same difference, so it predates this move.
+That reference ran as a temporary loopback container, `bertie380-ref`, since removed.
+Against the immediate base build, all 18 cases are identical.
+
+Interop: `scripts/stage19e-interop.py` and `scripts/stage19-compare.py` ran against a
+native loopback server built from this revision, with a loopback reference server built
+from the base branch. The row matrix matches the E table. The
+"rustls default config" row (TLS 1.3, ChaCha20-Poly1305, X25519MLKEM768, certificate
+verified) ran the spike's default rustls client from a copy under `target/`.
+
+Coverage (`nix build .#coverage`, formal-coverage v1.13.0, aarch64-darwin):
+
+| | Proven | Tested | Trusted | Unverified |
+|---|---|---|---|---|
+| bertie-tls receipt at 9b55643 (no F* script) | 0 | 1,151 | 25 | 3,655 |
+| bertie-tls receipt at 380c23f | 4,063 | 208 | 161 | 444 |
+| Bertie CI, 380c23f, default features | 4,063 | 253 | 161 | 553 |
+| Shipped tree before | 887 | 1,366 | 25 | 300,403 |
+| Shipped tree after | 4,950 | 423 | 161 | 297,786 |
+| First party, before and after | 887 | 215 | 0 | 264 |
+
+The receipt reports 175 verified F* files and 310 credited units. The gap to Bertie's
+CI record is exactly `src/stream/client.rs` (45 tested and 109 unverified lines). That
+module needs the default `client` feature, which this server leaves off. Every other
+unit matches CI in lines and status. Bertie's shipped files grew from 6,588 to 7,227
+lines between the two revisions. 2,351 of them are outside the receipt and stay
+unverified in the Shipped tree (1,757 before).

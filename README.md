@@ -60,12 +60,14 @@ CARGO_HOME="$PWD/.tools/cargo" RUSTUP_HOME="$PWD/.tools/rustup" \
 python3 verification/scripts/spec-mutants.py > logs/mutants.log 2>&1
 ```
 
-[Local results, 2026-11-21](specs/development/BERTIE-BOUNDARY.md#results--2026-11-21-e):
+[Local results, 2026-11-26, bertie-tls 380c23f](specs/development/BERTIE-BOUNDARY.md#results--2026-11-26-bertie-tls-380c23f):
 Verus: parser 211, transport 347, retained AEAD helpers 9, standalone hello 30;
 zero errors. These proof roots overlap.
 Seven extracted Bertie F* checks pass under their existing abstract crypto
 models. Workspace tests: 60 passed. Mutants: 20/20 caught. Strict-client
-handshakes: 10,000, zero failures. Nix check and static image gates pass.
+handshakes: 10,000, zero failures. Interop: 26 rows pass; 2 are unsupported by
+local clients. Nix check and static image gates were not rerun for this move;
+the last recorded pass is in the [E results](specs/development/BERTIE-BOUNDARY.md#results--2026-11-21-e).
 The stage-17 DWARF method counts 736 Bertie lines in a debug companion of the
 image's source/profile; this is an upper bound, not execution or proof coverage.
 
@@ -111,7 +113,15 @@ The report credits bertie-tls at the server's locked revision and enabled featur
 Compiled dependency lines outside its receipt count as unverified. Cross-package
 interfaces are outside the proof claim. The ratchet still uses first-party totals.
 
-At the current lock on aarch64-darwin, the tree contains 302,681 lines.
-The receipt moves 1,151 lines to tested and 25 to trusted. Bertie's
-1,757 lines outside the receipt remain unverified. Both reports count
-887 proven lines, all first-party.
+Measured 2026-11-26 on aarch64-darwin with bertie-tls at 380c23f. The tree
+contains 303,320 lines: 4,950 proven, 423 tested, 161 trusted and 297,786
+unverified. The receipt runs Bertie's `scripts/verify-fstar.py` (exit 0) and
+counts 4,063 proven, 208 tested, 161 trusted and 444 unverified Bertie lines.
+The other 2,351 lines in Bertie's shipped files are outside the receipt and count
+as unverified. First-party lines are unchanged: 887 proven, 215 tested,
+264 unverified. At the previous pin, 9b55643, which had no F* script, the
+receipt credited no proofs. The tree then held 887 proven lines, all first-party.
+
+Bertie's CI records 4,063/253/161/553 for its default features. Those include
+`client`, which scratch-server leaves off. The whole difference is
+`src/stream/client.rs`: 45 tested and 109 unverified lines.
