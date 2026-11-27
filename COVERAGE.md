@@ -119,7 +119,9 @@ Safety-only means proven free of panics, overflows and out-of-bounds access, inc
 The first-party security runtime denominator conservatively starts at main and
 includes startup, TLS adapters and the readiness probe. Test/proof code is separated
 structurally by the tool. Third-party TLS/crypto code is outside this badge's
-first-party denominator and remains trusted; no Bertie F* receipts are supplied.
+first-party denominator and remains trusted. Bertie's F* receipt (bertie-tls
+380c23f, measured 2026-11-26) is credited only in the informational Shipped tree
+of `nix build .#coverage` (see README), never in this badge or its ratchet.
 Verus credit requires accepted evidence and explicit exec contracts. Uncontracted
 exec functions, inactive cfg branches, trusted external bodies and unsafe/escape
 sites cannot become proven merely because a root passes. The full report retains
